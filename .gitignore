@@ -1,0 +1,24 @@
+# ESP-IDF
+build/
+sdkconfig
+sdkconfig.old
+managed_components/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Editors
+.vscode/
+.idea/
+
+# Recovery / proprietary binaries
+*.bin
+recovery/*
+!recovery/README.md
+
+# Local secrets
+.env
+secrets.*
+wifi.*
