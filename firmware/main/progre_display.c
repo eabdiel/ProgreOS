@@ -1,4 +1,5 @@
 #include <stdbool.h>
+#include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
 
@@ -190,54 +191,204 @@ static void draw_word_progre(void)
     }
 }
 
-static void draw_face(bool blink)
+
+static void draw_pixel(int x, int y, uint16_t color)
+{
+    lcd_fill_rect(x, y, 1, 1, color);
+}
+
+static void draw_line(
+    int x0,
+    int y0,
+    int x1,
+    int y1,
+    uint16_t color
+)
+{
+    int dx = abs(x1 - x0);
+    int sx = x0 < x1 ? 1 : -1;
+    int dy = -abs(y1 - y0);
+    int sy = y0 < y1 ? 1 : -1;
+    int err = dx + dy;
+
+    while (true) {
+        draw_pixel(x0, y0, color);
+
+        if (x0 == x1 && y0 == y1) {
+            break;
+        }
+
+        int e2 = 2 * err;
+
+        if (e2 >= dy) {
+            err += dy;
+            x0 += sx;
+        }
+
+        if (e2 <= dx) {
+            err += dx;
+            y0 += sy;
+        }
+    }
+}
+
+static void draw_circle(
+    int cx,
+    int cy,
+    int radius,
+    uint16_t color
+)
+{
+    int x = radius;
+    int y = 0;
+    int err = 0;
+
+    while (x >= y) {
+        draw_pixel(cx + x, cy + y, color);
+        draw_pixel(cx + y, cy + x, color);
+        draw_pixel(cx - y, cy + x, color);
+        draw_pixel(cx - x, cy + y, color);
+        draw_pixel(cx - x, cy - y, color);
+        draw_pixel(cx - y, cy - x, color);
+        draw_pixel(cx + y, cy - x, color);
+        draw_pixel(cx + x, cy - y, color);
+
+        y++;
+
+        if (err <= 0) {
+            err += 2 * y + 1;
+        }
+
+        if (err > 0) {
+            x--;
+            err -= 2 * x + 1;
+        }
+    }
+}
+
+static void draw_progre_body(void)
 {
     /*
-     * Progre Face v0.2
+     * Canonical monochrome Progre silhouette.
      *
-     * Monochrome mascot face:
-     * - dark-gray structural frame
-     * - white expressive eyes
-     * - small centered mouth
-     *
-     * Keep the eye geometry aligned with the proven First Light
-     * blink regions.
+     * The circular side elements are Progre's eyes.
+     * The two diagonal marks near the top are his nose.
      */
 
-    /* Main face frame with clipped/chamfered corners. */
-    lcd_fill_rect(31, 20, 66, 3, COLOR_DARK_GRAY);
-    lcd_fill_rect(25, 26, 3, 50, COLOR_DARK_GRAY);
-    lcd_fill_rect(100, 26, 3, 50, COLOR_DARK_GRAY);
-    lcd_fill_rect(31, 79, 66, 3, COLOR_DARK_GRAY);
+    /* Main rounded-square body approximation. */
+    draw_line(34, 11, 94, 11, COLOR_WHITE);
 
-    /* Corner accents give the square face a softer mascot shape. */
-    lcd_fill_rect(28, 23, 6, 3, COLOR_DARK_GRAY);
-    lcd_fill_rect(94, 23, 6, 3, COLOR_DARK_GRAY);
-    lcd_fill_rect(28, 76, 6, 3, COLOR_DARK_GRAY);
-    lcd_fill_rect(94, 76, 6, 3, COLOR_DARK_GRAY);
+    draw_line(34, 11, 27, 14, COLOR_WHITE);
+    draw_line(27, 14, 22, 21, COLOR_WHITE);
+    draw_line(22, 21, 22, 79, COLOR_WHITE);
 
-    if (blink) {
-        lcd_fill_rect(39, 43, 15, 3, COLOR_WHITE);
-        lcd_fill_rect(74, 43, 15, 3, COLOR_WHITE);
-    } else {
-        lcd_fill_rect(43, 40, 7, 9, COLOR_WHITE);
-        lcd_fill_rect(78, 40, 7, 9, COLOR_WHITE);
-    }
+    draw_line(94, 11, 101, 14, COLOR_WHITE);
+    draw_line(101, 14, 106, 21, COLOR_WHITE);
+    draw_line(106, 21, 106, 79, COLOR_WHITE);
 
+    /* Lower body / legs. */
+    draw_line(22, 79, 29, 86, COLOR_WHITE);
+    draw_line(29, 86, 39, 89, COLOR_WHITE);
+
+    draw_line(39, 89, 39, 105, COLOR_WHITE);
+    draw_line(39, 105, 43, 111, COLOR_WHITE);
+    draw_line(43, 111, 50, 113, COLOR_WHITE);
+    draw_line(50, 113, 56, 110, COLOR_WHITE);
+    draw_line(56, 110, 56, 94, COLOR_WHITE);
+
+    draw_line(56, 94, 72, 94, COLOR_WHITE);
+
+    draw_line(72, 94, 72, 110, COLOR_WHITE);
+    draw_line(72, 110, 78, 113, COLOR_WHITE);
+    draw_line(78, 113, 85, 111, COLOR_WHITE);
+    draw_line(85, 111, 89, 105, COLOR_WHITE);
+    draw_line(89, 105, 89, 89, COLOR_WHITE);
+
+    draw_line(89, 89, 99, 86, COLOR_WHITE);
+    draw_line(99, 86, 106, 79, COLOR_WHITE);
+
+    /* Arms. */
+    draw_line(22, 72, 14, 77, COLOR_WHITE);
+    draw_line(14, 77, 8, 87, COLOR_WHITE);
+    draw_line(8, 87, 8, 99, COLOR_WHITE);
+    draw_line(8, 99, 12, 102, COLOR_WHITE);
+    draw_line(12, 102, 16, 99, COLOR_WHITE);
+    draw_line(16, 99, 16, 88, COLOR_WHITE);
+    draw_line(16, 88, 22, 82, COLOR_WHITE);
+
+    draw_line(106, 72, 114, 77, COLOR_WHITE);
+    draw_line(114, 77, 120, 87, COLOR_WHITE);
+    draw_line(120, 87, 120, 99, COLOR_WHITE);
+    draw_line(120, 99, 116, 102, COLOR_WHITE);
+    draw_line(116, 102, 112, 99, COLOR_WHITE);
+    draw_line(112, 99, 112, 88, COLOR_WHITE);
+    draw_line(112, 88, 106, 82, COLOR_WHITE);
+
+    /* Side-mounted circular eyes. */
+    draw_circle(17, 47, 13, COLOR_WHITE);
+    draw_circle(17, 47, 7, COLOR_WHITE);
+
+    draw_circle(111, 47, 13, COLOR_WHITE);
+    draw_circle(111, 47, 7, COLOR_WHITE);
+
+    /* Small central pupil points. */
+    lcd_fill_rect(15, 45, 5, 5, COLOR_WHITE);
+    lcd_fill_rect(109, 45, 5, 5, COLOR_WHITE);
+
+    /* Nose marks. */
+    draw_line(51, 28, 56, 23, COLOR_WHITE);
+    draw_line(72, 23, 77, 28, COLOR_WHITE);
+}
+
+static void draw_idle_mouth(void)
+{
     /*
-     * Small neutral-friendly mouth.
-     *
-     *      _____
-     *     |_____|
-     *
-     * This intentionally replaces the First Light zig-zag/"2".
-     * Future expression states can alter this independently of
-     * the eyes and face structure.
+     * Closed mouth with two downward-facing fangs.
      */
-    lcd_fill_rect(57, 62, 14, 3, COLOR_WHITE);
-    lcd_fill_rect(57, 65, 3, 4, COLOR_WHITE);
-    lcd_fill_rect(68, 65, 3, 4, COLOR_WHITE);
-    lcd_fill_rect(60, 69, 8, 2, COLOR_WHITE);
+    draw_line(43, 65, 85, 65, COLOR_WHITE);
+
+    draw_line(48, 65, 51, 71, COLOR_WHITE);
+    draw_line(51, 71, 54, 65, COLOR_WHITE);
+
+    draw_line(74, 65, 77, 71, COLOR_WHITE);
+    draw_line(77, 71, 80, 65, COLOR_WHITE);
+}
+
+static void draw_active_mouth(void)
+{
+    /*
+     * Open jagged Progre mouth.
+     */
+    draw_line(40, 57, 49, 48, COLOR_WHITE);
+    draw_line(49, 48, 58, 58, COLOR_WHITE);
+    draw_line(58, 58, 64, 50, COLOR_WHITE);
+    draw_line(64, 50, 70, 58, COLOR_WHITE);
+    draw_line(70, 58, 79, 48, COLOR_WHITE);
+    draw_line(79, 48, 88, 57, COLOR_WHITE);
+
+    draw_line(88, 57, 88, 73, COLOR_WHITE);
+
+    draw_line(88, 73, 79, 82, COLOR_WHITE);
+    draw_line(79, 82, 70, 72, COLOR_WHITE);
+    draw_line(70, 72, 64, 80, COLOR_WHITE);
+    draw_line(64, 80, 58, 72, COLOR_WHITE);
+    draw_line(58, 72, 49, 82, COLOR_WHITE);
+    draw_line(49, 82, 40, 73, COLOR_WHITE);
+
+    draw_line(40, 73, 40, 57, COLOR_WHITE);
+}
+
+static void draw_progre(bool active)
+{
+    lcd_clear(COLOR_BLACK);
+
+    draw_progre_body();
+
+    if (active) {
+        draw_active_mouth();
+    } else {
+        draw_idle_mouth();
+    }
 }
 
 esp_err_t progre_display_init(void)
@@ -322,26 +473,13 @@ esp_err_t progre_display_init(void)
     return ESP_OK;
 }
 
-void progre_display_draw_first_light(void)
+
+void progre_display_show_idle(void)
 {
-    lcd_clear(COLOR_BLACK);
-    draw_face(false);
-    draw_word_progre();
+    draw_progre(false);
 }
 
-void progre_display_set_blink(bool closed)
+void progre_display_show_active(void)
 {
-    /*
-     * Redraw only the eye areas.
-     */
-    lcd_fill_rect(35, 36, 24, 18, COLOR_BLACK);
-    lcd_fill_rect(69, 36, 24, 18, COLOR_BLACK);
-
-    if (closed) {
-        lcd_fill_rect(39, 43, 15, 3, COLOR_WHITE);
-        lcd_fill_rect(74, 43, 15, 3, COLOR_WHITE);
-    } else {
-        lcd_fill_rect(43, 40, 7, 9, COLOR_WHITE);
-        lcd_fill_rect(78, 40, 7, 9, COLOR_WHITE);
-    }
+    draw_progre(true);
 }

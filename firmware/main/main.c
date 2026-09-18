@@ -60,7 +60,7 @@ void app_main(void)
     ESP_ERROR_CHECK(progre_display_init());
     talk_button_init();
 
-    progre_display_draw_first_light();
+    progre_display_show_idle();
 
     ESP_LOGI(TAG, "Display active.");
     ESP_LOGI(TAG, "Talk button active on GPIO%d.", PROGRE_BUTTON_TALK_PIN);
@@ -98,13 +98,12 @@ void app_main(void)
     bool candidate_pressed = stable_pressed;
 
     TickType_t candidate_since = xTaskGetTickCount();
-    TickType_t last_blink = xTaskGetTickCount();
     size_t voice_capture_frames = 0;
     bool voice_capture_full = false;
 
     if (stable_pressed) {
         ESP_LOGI(TAG, "Talk button held at startup.");
-        progre_display_set_blink(true);
+        progre_display_show_active();
     }
 
     while (1) {
@@ -129,7 +128,7 @@ void app_main(void)
                 ESP_LOGI(TAG, "Talk button PRESSED — listening");
                 voice_capture_frames = 0;
                 voice_capture_full = false;
-                progre_display_set_blink(true);
+                progre_display_show_active();
             } else {
                 ESP_LOGI(
                     TAG,
@@ -137,8 +136,6 @@ void app_main(void)
                     (unsigned)voice_capture_frames
                 );
 
-                progre_display_set_blink(false);
-                last_blink = now;
 
                 if (microphone_ready &&
                     voice_capture_frames > 0) {
@@ -156,6 +153,8 @@ void app_main(void)
                             esp_err_to_name(conversation_err)
                         );
                     }
+
+                    progre_display_show_idle();
                 }
             }
         }
@@ -215,21 +214,6 @@ void app_main(void)
             }
         }
 
-        /*
-         * Autonomous blink only while idle.
-         */
-        if (!stable_pressed &&
-            (now - last_blink) >= pdMS_TO_TICKS(BLINK_INTERVAL_MS)) {
 
-            ESP_LOGI(TAG, "blink");
-            progre_display_set_blink(true);
-
-            vTaskDelay(pdMS_TO_TICKS(BLINK_DURATION_MS));
-
-            progre_display_set_blink(false);
-            last_blink = xTaskGetTickCount();
-        }
-
-        vTaskDelay(pdMS_TO_TICKS(MAIN_POLL_MS));
     }
 }

@@ -352,7 +352,63 @@ original firmware preservation, reversible development where practical, explicit
 validation, and safe handling of destructive operations remain core requirements.
 </p>
 
-<h2>11. Project History</h2>
+<h2>11. Two-Face Visual Architecture</h2>
+<p>
+Progre maintains exactly two installed facial assets:
+<strong>Idle</strong> and <strong>Talk / Active</strong>.
+Idle represents the waiting state. Talk / Active represents the
+complete interaction from Talk-button press through listening,
+processing, speech synthesis, and spoken playback.
+</p>
+<p>
+Listening, processing, and speaking may remain distinct internal
+states, but all map visually to the single Active frame.
+</p>
+<p>
+There is no on-device face gallery. Installing a new face pair
+replaces the previous pair. Idle and Talk form one logical package
+and should be replaced together.
+</p>
+<p>
+The canonical hardware format is 128 × 128 monochrome artwork with
+a black background and white line art.
+</p>
+<p>
+The Progre Cockpit Face Converter will accept exactly two PNG/JPG
+images, validate or normalize them, preview the hardware result,
+and install the pair. Long term, replacing these assets should not
+require rebuilding Progre OS.
+</p>
+
+<h2>12. Project History</h2>
+<h3>September 17, 2026 — Two-Face Physical Render Checkpoint</h3>
+<p>
+Phase 1K established the first physical implementation of Progre's
+two-face visual architecture. Native monochrome Idle and Talk / Active
+renderers were successfully built and deployed to the AIPI Lite
+128 × 128 display.
+</p>
+<p>
+Physical testing confirmed that both states render independently on
+the actual hardware and that the interaction lifecycle can drive the
+two-state model. The implementation preserves the architectural rule
+of exactly two visible face states: Idle and Talk / Active.
+</p>
+<p>
+The initial native artwork is considered a functional prototype rather
+than final visual acceptance. Physical photographs showed that the
+mascot geometry requires additional refinement to more closely match
+the accepted Progre reference design. That refinement is the next
+Phase 1K activity.
+</p>
+<p>
+Future work remains unchanged: the Cockpit will expose face controls
+and ultimately provide a two-image converter for one Idle and one Talk
+asset. Replacement will operate on the pair rather than creating an
+on-device face library.
+</p>
+
+
 
 <h3>September 17, 2026 — First Full Spoken AI Conversation</h3>
 
