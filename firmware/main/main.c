@@ -7,6 +7,7 @@
 #include "esp_log.h"
 
 #include "board_aipi_lite.h"
+#include "progre_audio.h"
 #include "progre_display.h"
 
 static const char *TAG = "PROGRE";
@@ -15,6 +16,7 @@ static const char *TAG = "PROGRE";
 #define MAIN_POLL_MS       10
 #define BLINK_INTERVAL_MS  3000
 #define BLINK_DURATION_MS  180
+#define MIC_MEASURE_INTERVAL_MS 250
 
 static void talk_button_init(void)
 {
@@ -37,8 +39,8 @@ static bool talk_button_raw_pressed(void)
 void app_main(void)
 {
     ESP_LOGI(TAG, "================================");
-    ESP_LOGI(TAG, "        PROGRE OS v0.3");
-    ESP_LOGI(TAG, "             BODY");
+    ESP_LOGI(TAG, "        PROGRE OS v0.4");
+    ESP_LOGI(TAG, "             VOICE");
     ESP_LOGI(TAG, "================================");
 
     ESP_ERROR_CHECK(progre_display_init());
@@ -49,11 +51,32 @@ void app_main(void)
     ESP_LOGI(TAG, "Display active.");
     ESP_LOGI(TAG, "Talk button active on GPIO%d.", PROGRE_BUTTON_TALK_PIN);
 
+    bool microphone_ready = false;
+
+    esp_err_t audio_probe = progre_audio_probe_codec();
+    if (audio_probe == ESP_OK) {
+        ESP_LOGI(TAG, "Audio codec discovery PASS.");
+
+        esp_err_t microphone_init = progre_audio_init_microphone();
+        if (microphone_init == ESP_OK) {
+            microphone_ready = true;
+            ESP_LOGI(TAG, "Microphone initialization PASS.");
+
+        } else {
+            ESP_LOGW(TAG, "Microphone initialization unavailable: %s",
+                     esp_err_to_name(microphone_init));
+        }
+    } else {
+        ESP_LOGW(TAG, "Audio codec discovery unavailable: %s",
+                 esp_err_to_name(audio_probe));
+    }
+
     bool stable_pressed = talk_button_raw_pressed();
     bool candidate_pressed = stable_pressed;
 
     TickType_t candidate_since = xTaskGetTickCount();
     TickType_t last_blink = xTaskGetTickCount();
+    TickType_t last_mic_measure = 0;
 
     if (stable_pressed) {
         ESP_LOGI(TAG, "Talk button held at startup.");
@@ -86,6 +109,30 @@ void app_main(void)
                 progre_display_set_blink(false);
                 last_blink = now;
             }
+        }
+
+        /*
+         * Hardware microphone validation.
+         *
+         * While the talk button is held, capture a short window
+         * approximately four times per second and report signal
+         * statistics for both I2S slots.
+         */
+        if (stable_pressed && microphone_ready &&
+            (last_mic_measure == 0 ||
+             (now - last_mic_measure) >=
+                 pdMS_TO_TICKS(MIC_MEASURE_INTERVAL_MS))) {
+
+            esp_err_t mic_result =
+                progre_audio_measure_microphone();
+
+            if (mic_result != ESP_OK) {
+                ESP_LOGW(TAG,
+                         "Microphone measurement unavailable: %s",
+                         esp_err_to_name(mic_result));
+            }
+
+            last_mic_measure = xTaskGetTickCount();
         }
 
         /*
