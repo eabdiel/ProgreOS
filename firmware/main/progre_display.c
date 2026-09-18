@@ -266,128 +266,187 @@ static void draw_circle(
     }
 }
 
-static void draw_progre_body(void)
+
+#define BANNER_HEIGHT 18
+#define TINY_SCALE     2
+#define TINY_W         34
+#define TINY_H         32
+
+static void tiny_px(int ox, int oy, int x, int y)
 {
-    /*
-     * Canonical monochrome Progre silhouette.
-     *
-     * The circular side elements are Progre's eyes.
-     * The two diagonal marks near the top are his nose.
-     */
-
-    /* Main rounded-square body approximation. */
-    draw_line(34, 11, 94, 11, COLOR_WHITE);
-
-    draw_line(34, 11, 27, 14, COLOR_WHITE);
-    draw_line(27, 14, 22, 21, COLOR_WHITE);
-    draw_line(22, 21, 22, 79, COLOR_WHITE);
-
-    draw_line(94, 11, 101, 14, COLOR_WHITE);
-    draw_line(101, 14, 106, 21, COLOR_WHITE);
-    draw_line(106, 21, 106, 79, COLOR_WHITE);
-
-    /* Lower body / legs. */
-    draw_line(22, 79, 29, 86, COLOR_WHITE);
-    draw_line(29, 86, 39, 89, COLOR_WHITE);
-
-    draw_line(39, 89, 39, 105, COLOR_WHITE);
-    draw_line(39, 105, 43, 111, COLOR_WHITE);
-    draw_line(43, 111, 50, 113, COLOR_WHITE);
-    draw_line(50, 113, 56, 110, COLOR_WHITE);
-    draw_line(56, 110, 56, 94, COLOR_WHITE);
-
-    draw_line(56, 94, 72, 94, COLOR_WHITE);
-
-    draw_line(72, 94, 72, 110, COLOR_WHITE);
-    draw_line(72, 110, 78, 113, COLOR_WHITE);
-    draw_line(78, 113, 85, 111, COLOR_WHITE);
-    draw_line(85, 111, 89, 105, COLOR_WHITE);
-    draw_line(89, 105, 89, 89, COLOR_WHITE);
-
-    draw_line(89, 89, 99, 86, COLOR_WHITE);
-    draw_line(99, 86, 106, 79, COLOR_WHITE);
-
-    /* Arms. */
-    draw_line(22, 72, 14, 77, COLOR_WHITE);
-    draw_line(14, 77, 8, 87, COLOR_WHITE);
-    draw_line(8, 87, 8, 99, COLOR_WHITE);
-    draw_line(8, 99, 12, 102, COLOR_WHITE);
-    draw_line(12, 102, 16, 99, COLOR_WHITE);
-    draw_line(16, 99, 16, 88, COLOR_WHITE);
-    draw_line(16, 88, 22, 82, COLOR_WHITE);
-
-    draw_line(106, 72, 114, 77, COLOR_WHITE);
-    draw_line(114, 77, 120, 87, COLOR_WHITE);
-    draw_line(120, 87, 120, 99, COLOR_WHITE);
-    draw_line(120, 99, 116, 102, COLOR_WHITE);
-    draw_line(116, 102, 112, 99, COLOR_WHITE);
-    draw_line(112, 99, 112, 88, COLOR_WHITE);
-    draw_line(112, 88, 106, 82, COLOR_WHITE);
-
-    /* Side-mounted circular eyes. */
-    draw_circle(17, 47, 13, COLOR_WHITE);
-    draw_circle(17, 47, 7, COLOR_WHITE);
-
-    draw_circle(111, 47, 13, COLOR_WHITE);
-    draw_circle(111, 47, 7, COLOR_WHITE);
-
-    /* Small central pupil points. */
-    lcd_fill_rect(15, 45, 5, 5, COLOR_WHITE);
-    lcd_fill_rect(109, 45, 5, 5, COLOR_WHITE);
-
-    /* Nose marks. */
-    draw_line(51, 28, 56, 23, COLOR_WHITE);
-    draw_line(72, 23, 77, 28, COLOR_WHITE);
+    lcd_fill_rect(
+        ox + x * TINY_SCALE,
+        oy + y * TINY_SCALE,
+        TINY_SCALE,
+        TINY_SCALE,
+        COLOR_WHITE
+    );
 }
 
-static void draw_idle_mouth(void)
+static void tiny_hline(
+    int ox, int oy, int x0, int x1, int y)
 {
-    /*
-     * Closed mouth with two downward-facing fangs.
-     */
-    draw_line(43, 65, 85, 65, COLOR_WHITE);
-
-    draw_line(48, 65, 51, 71, COLOR_WHITE);
-    draw_line(51, 71, 54, 65, COLOR_WHITE);
-
-    draw_line(74, 65, 77, 71, COLOR_WHITE);
-    draw_line(77, 71, 80, 65, COLOR_WHITE);
+    for (int x = x0; x <= x1; ++x) {
+        tiny_px(ox, oy, x, y);
+    }
 }
 
-static void draw_active_mouth(void)
+static void draw_tiny_progre(
+    int ox,
+    int oy,
+    bool active,
+    bool blink,
+    bool step)
 {
     /*
-     * Open jagged Progre mouth.
+     * 17 x 16 logical-pixel Tamagotchi-style Progre.
+     * Rendered at 2x scale = 34 x 32 physical pixels.
      */
-    draw_line(40, 57, 49, 48, COLOR_WHITE);
-    draw_line(49, 48, 58, 58, COLOR_WHITE);
-    draw_line(58, 58, 64, 50, COLOR_WHITE);
-    draw_line(64, 50, 70, 58, COLOR_WHITE);
-    draw_line(70, 58, 79, 48, COLOR_WHITE);
-    draw_line(79, 48, 88, 57, COLOR_WHITE);
 
-    draw_line(88, 57, 88, 73, COLOR_WHITE);
+    tiny_hline(ox, oy, 5, 11, 0);
+    tiny_px(ox, oy, 4, 1);
+    tiny_px(ox, oy, 12, 1);
 
-    draw_line(88, 73, 79, 82, COLOR_WHITE);
-    draw_line(79, 82, 70, 72, COLOR_WHITE);
-    draw_line(70, 72, 64, 80, COLOR_WHITE);
-    draw_line(64, 80, 58, 72, COLOR_WHITE);
-    draw_line(58, 72, 49, 82, COLOR_WHITE);
-    draw_line(49, 82, 40, 73, COLOR_WHITE);
+    tiny_px(ox, oy, 3, 2);
+    tiny_px(ox, oy, 13, 2);
+    tiny_px(ox, oy, 2, 3);
+    tiny_px(ox, oy, 14, 3);
 
-    draw_line(40, 73, 40, 57, COLOR_WHITE);
+    for (int y = 4; y <= 11; ++y) {
+        tiny_px(ox, oy, 2, y);
+        tiny_px(ox, oy, 14, y);
+    }
+
+    /* Side pods / ears. */
+    tiny_px(ox, oy, 0, 5);
+    tiny_px(ox, oy, 1, 4);
+    tiny_px(ox, oy, 1, 6);
+
+    tiny_px(ox, oy, 16, 5);
+    tiny_px(ox, oy, 15, 4);
+    tiny_px(ox, oy, 15, 6);
+
+    /* Eyes. */
+    if (blink) {
+        tiny_hline(ox, oy, 5, 6, 4);
+        tiny_hline(ox, oy, 10, 11, 4);
+    } else {
+        tiny_px(ox, oy, 5, 4);
+        tiny_px(ox, oy, 11, 4);
+    }
+
+    /* Progre's little brow / nose marks. */
+    tiny_px(ox, oy, 7, 3);
+    tiny_px(ox, oy, 9, 3);
+
+    /* Mouth. */
+    if (active) {
+        tiny_px(ox, oy, 5, 7);
+        tiny_px(ox, oy, 6, 8);
+        tiny_px(ox, oy, 7, 7);
+        tiny_px(ox, oy, 8, 8);
+        tiny_px(ox, oy, 9, 7);
+        tiny_px(ox, oy, 10, 8);
+        tiny_px(ox, oy, 11, 7);
+
+        tiny_hline(ox, oy, 5, 11, 10);
+        tiny_px(ox, oy, 5, 9);
+        tiny_px(ox, oy, 11, 9);
+    } else {
+        tiny_px(ox, oy, 5, 8);
+        tiny_px(ox, oy, 6, 7);
+        tiny_px(ox, oy, 7, 8);
+        tiny_px(ox, oy, 8, 7);
+        tiny_px(ox, oy, 9, 8);
+        tiny_px(ox, oy, 10, 7);
+        tiny_px(ox, oy, 11, 8);
+    }
+
+    /* Lower body. */
+    tiny_px(ox, oy, 3, 12);
+    tiny_px(ox, oy, 4, 13);
+    tiny_hline(ox, oy, 5, 11, 14);
+    tiny_px(ox, oy, 12, 13);
+    tiny_px(ox, oy, 13, 12);
+
+    /*
+     * Two-frame walk. One foot extends while the other retracts.
+     */
+    if (step) {
+        tiny_hline(ox, oy, 4, 6, 15);
+        tiny_hline(ox, oy, 11, 12, 15);
+    } else {
+        tiny_hline(ox, oy, 4, 5, 15);
+        tiny_hline(ox, oy, 10, 12, 15);
+    }
 }
 
-static void draw_progre(bool active)
+void progre_display_show_companion(
+    int x,
+    bool active,
+    bool blink,
+    bool step)
 {
     lcd_clear(COLOR_BLACK);
 
-    draw_progre_body();
+    /* Quiet divider below the speech-banner region. */
+    lcd_fill_rect(
+        0,
+        BANNER_HEIGHT - 1,
+        PROGRE_LCD_WIDTH,
+        1,
+        COLOR_DARK_GRAY
+    );
 
-    if (active) {
-        draw_active_mouth();
-    } else {
-        draw_idle_mouth();
+    if (x < 0) {
+        x = 0;
+    }
+
+    if (x > PROGRE_LCD_WIDTH - TINY_W) {
+        x = PROGRE_LCD_WIDTH - TINY_W;
+    }
+
+    const int floor_y =
+        PROGRE_LCD_HEIGHT - TINY_H - 5;
+
+    draw_tiny_progre(
+        x,
+        floor_y,
+        active,
+        blink,
+        step
+    );
+}
+
+void progre_display_show_banner(
+    const char *text,
+    int scroll_x)
+{
+    lcd_fill_rect(
+        0,
+        0,
+        PROGRE_LCD_WIDTH,
+        BANNER_HEIGHT - 1,
+        COLOR_BLACK
+    );
+
+    if (text == NULL || text[0] == '\0') {
+        return;
+    }
+
+    int x = scroll_x;
+
+    for (const char *c = text; *c; ++c) {
+        if (x > -6 && x < PROGRE_LCD_WIDTH) {
+            draw_char(
+                x,
+                4,
+                *c,
+                COLOR_WHITE,
+                1
+            );
+        }
+        x += 6;
     }
 }
 
@@ -471,15 +530,4 @@ esp_err_t progre_display_init(void)
     ESP_LOGI(TAG, "Display initialized");
 
     return ESP_OK;
-}
-
-
-void progre_display_show_idle(void)
-{
-    draw_progre(false);
-}
-
-void progre_display_show_active(void)
-{
-    draw_progre(true);
 }

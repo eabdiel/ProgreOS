@@ -5,6 +5,7 @@
 
 #include "driver/gpio.h"
 #include "esp_log.h"
+#include "esp_random.h"
 
 #include "board_aipi_lite.h"
 #include "progre_audio.h"
@@ -17,7 +18,8 @@ static const char *TAG = "PROGRE";
 
 #define BUTTON_DEBOUNCE_MS 30
 #define MAIN_POLL_MS       10
-#define BLINK_INTERVAL_MS  3000
+#define BLINK_MIN_INTERVAL_MS 2800
+#define BLINK_MAX_INTERVAL_MS 6500
 #define BLINK_DURATION_MS  180
 #define MIC_MEASURE_INTERVAL_MS 250
 
@@ -54,14 +56,14 @@ static int16_t s_voice_capture[
 void app_main(void)
 {
     ESP_LOGI(TAG, "================================");
-    ESP_LOGI(TAG, "        PROGRE OS v0.5");
-    ESP_LOGI(TAG, "           CONNECTED");
+    ESP_LOGI(TAG, "        PROGRE OS v0.7");
+    ESP_LOGI(TAG, "       PORTABLE COMPANION");
     ESP_LOGI(TAG, "================================");
 
     ESP_ERROR_CHECK(progre_display_init());
     talk_button_init();
 
-    progre_display_show_idle();
+    progre_display_show_companion(47, false, false, false);
 
     ESP_LOGI(TAG, "Display active.");
     ESP_LOGI(TAG, "Talk button active on GPIO%d.", PROGRE_BUTTON_TALK_PIN);
@@ -96,6 +98,14 @@ void app_main(void)
                  esp_err_to_name(audio_probe));
     }
 
+    int companion_x = 47;
+    int companion_dir = 1;
+    bool walk_step = false;
+
+    TickType_t next_walk =
+        xTaskGetTickCount() +
+        pdMS_TO_TICKS(350);
+
     bool stable_pressed = talk_button_raw_pressed();
     bool candidate_pressed = stable_pressed;
 
@@ -103,9 +113,23 @@ void app_main(void)
     size_t voice_capture_frames = 0;
     bool voice_capture_full = false;
 
+    bool blink_active = false;
+    TickType_t blink_until = 0;
+
+    uint32_t blink_span =
+        BLINK_MAX_INTERVAL_MS -
+        BLINK_MIN_INTERVAL_MS + 1;
+
+    TickType_t next_blink =
+        xTaskGetTickCount() +
+        pdMS_TO_TICKS(
+            BLINK_MIN_INTERVAL_MS +
+            (esp_random() % blink_span)
+        );
+
     if (stable_pressed) {
         ESP_LOGI(TAG, "Talk button held at startup.");
-        progre_display_show_active();
+        progre_display_show_companion(companion_x, true, false, walk_step);
     }
 
     while (1) {
@@ -130,7 +154,8 @@ void app_main(void)
                 ESP_LOGI(TAG, "Talk button PRESSED — listening");
                 voice_capture_frames = 0;
                 voice_capture_full = false;
-                progre_display_show_active();
+                blink_active = false;
+                progre_display_show_companion(companion_x, true, false, walk_step);
             } else {
                 ESP_LOGI(
                     TAG,
@@ -156,8 +181,75 @@ void app_main(void)
                         );
                     }
 
-                    progre_display_show_idle();
+                    progre_display_show_companion(47, false, false, false);
                 }
+            }
+        }
+
+        /*
+         * Tiny companion roaming.
+         * Walking pauses while listening or blinking.
+         */
+        if (!stable_pressed &&
+            !blink_active &&
+            now >= next_walk) {
+
+            companion_x += companion_dir * 2;
+
+            if (companion_x <= 4) {
+                companion_x = 4;
+                companion_dir = 1;
+            } else if (
+                companion_x >=
+                PROGRE_LCD_WIDTH - 38
+            ) {
+                companion_x =
+                    PROGRE_LCD_WIDTH - 38;
+                companion_dir = -1;
+            }
+
+            walk_step = !walk_step;
+
+            progre_display_show_companion(
+                companion_x,
+                false,
+                false,
+                walk_step
+            );
+
+            next_walk =
+                now +
+                pdMS_TO_TICKS(
+                    260 + (esp_random() % 240)
+                );
+        }
+
+        /*
+         * Natural idle blink.
+         *
+         * Talking/listening always owns the display. Blink is only
+         * allowed while idle and consists of one short second frame.
+         */
+        if (!stable_pressed) {
+            if (blink_active) {
+                if (now >= blink_until) {
+                    blink_active = false;
+                    progre_display_show_companion(47, false, false, false);
+
+                    next_blink =
+                        now +
+                        pdMS_TO_TICKS(
+                            BLINK_MIN_INTERVAL_MS +
+                            (esp_random() % blink_span)
+                        );
+                }
+            } else if (now >= next_blink) {
+                blink_active = true;
+                blink_until =
+                    now +
+                    pdMS_TO_TICKS(BLINK_DURATION_MS);
+
+                progre_display_show_companion(companion_x, false, true, walk_step);
             }
         }
 

@@ -1,4 +1,6 @@
 from __future__ import annotations
+
+import base64
 import subprocess
 import tempfile
 import wave
@@ -378,7 +380,11 @@ def device_audio():
             mimetype="application/octet-stream",
             headers={
                 "X-Progre-Audio-Format":
-                    "pcm_s16le_mono_16000"
+                    "pcm_s16le_mono_16000",
+                "X-Progre-Text-B64":
+                    base64.b64encode(
+                        answer.encode("utf-8")
+                    ).decode("ascii"),
             },
         )
 

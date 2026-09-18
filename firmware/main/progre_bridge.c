@@ -13,6 +13,8 @@
 #include "sdkconfig.h"
 
 #include "progre_audio.h"
+#include "progre_display.h"
+#include "mbedtls/base64.h"
 static const char *TAG = "PROGRE_BRIDGE";
 
 #define RESPONSE_BUFFER_SIZE 512
@@ -396,6 +398,10 @@ typedef struct {
     size_t response_bytes;
     uint8_t carry_byte;
     bool have_carry;
+
+    char display_text[192];
+    int banner_x;
+    size_t next_banner_byte;
 } progre_audio_stream_response_t;
 
 
@@ -407,6 +413,38 @@ static esp_err_t progre_audio_stream_http_event(
         (progre_audio_stream_response_t *)evt->user_data;
 
     if (stream == NULL) {
+        return ESP_OK;
+    }
+
+    if (evt->event_id == HTTP_EVENT_ON_HEADER &&
+        evt->header_key != NULL &&
+        evt->header_value != NULL &&
+        strcmp(
+            evt->header_key,
+            "X-Progre-Text-B64"
+        ) == 0) {
+
+        size_t decoded_len = 0;
+
+        int rc = mbedtls_base64_decode(
+            (unsigned char *)stream->display_text,
+            sizeof(stream->display_text) - 1,
+            &decoded_len,
+            (const unsigned char *)evt->header_value,
+            strlen(evt->header_value)
+        );
+
+        if (rc == 0) {
+            stream->display_text[decoded_len] = '\0';
+            stream->banner_x = 2;
+            stream->next_banner_byte = 0;
+
+            progre_display_show_banner(
+                stream->display_text,
+                stream->banner_x
+            );
+        }
+
         return ESP_OK;
     }
 
@@ -526,6 +564,26 @@ static esp_err_t progre_audio_stream_http_event(
     }
 
     stream->response_bytes += len;
+
+    /*
+     * Audio delivery provides a convenient speaking-time clock.
+     * Roughly every 3200 PCM bytes (~100 ms at 16 kHz mono),
+     * move the banner one pixel left.
+     */
+    if (stream->display_text[0] != '\0' &&
+        stream->response_bytes >=
+            stream->next_banner_byte) {
+
+        stream->banner_x--;
+
+        progre_display_show_banner(
+            stream->display_text,
+            stream->banner_x
+        );
+
+        stream->next_banner_byte =
+            stream->response_bytes + 3200;
+    }
 
     return ESP_OK;
 }
