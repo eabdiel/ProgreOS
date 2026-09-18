@@ -381,6 +381,45 @@ require rebuilding Progre OS.
 </p>
 
 <h2>12. Project History</h2>
+<h2>13. Connectivity &amp; Recovery Architecture</h2>
+
+<p>
+USB is the trusted local commissioning, recovery, and configuration
+channel for Progre. The Progre Cockpit serves as the operator interface
+for recovery and connection management.
+</p>
+
+<p>
+Wi-Fi credentials and other connection parameters are runtime device
+configuration. They should be stored on the device and changed without
+rebuilding or reflashing the complete Progre OS application.
+</p>
+
+<p>
+The Cockpit troubleshooting model evaluates the operational chain in
+layers: USB connection, Progre OS responsiveness, Wi-Fi state, network
+addressing, Voice Bridge reachability, Whisper, Ollama, and Piper.
+Recovery should identify the failing layer rather than displaying only
+a generic offline state.
+</p>
+
+<p>
+When Progre is attached by USB, the Cockpit will support Wi-Fi
+commissioning through a narrow device-control protocol. Planned
+operations include status, Wi-Fi scan, Wi-Fi configuration, reconnect,
+and reboot. Nearby networks will be selectable from the Cockpit and
+credentials will be stored in ESP32 NVS rather than tracked source
+configuration.
+</p>
+
+<p>
+This same recovery path is intended to become part of the future
+AIPI Lite to Progre conversion workflow: flash Progre OS, provision
+network access, validate the Voice Bridge, configure the active face
+pair, run hardware checks, and create the device manifest.
+</p>
+
+
 <h3>September 17, 2026 — Two-Face Physical Render Checkpoint</h3>
 <p>
 Phase 1K established the first physical implementation of Progre's
