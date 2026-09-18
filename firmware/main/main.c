@@ -9,6 +9,7 @@
 #include "board_aipi_lite.h"
 #include "progre_audio.h"
 #include "progre_wifi.h"
+#include "progre_bridge.h"
 #include "progre_display.h"
 
 static const char *TAG = "PROGRE";
@@ -64,6 +65,7 @@ void app_main(void)
             ESP_LOGI(TAG, "Microphone initialization PASS.");
 
     esp_err_t wifi_err = progre_wifi_init();
+    progre_bridge_init();
     if (wifi_err == ESP_OK) {
         ESP_LOGI(TAG, "Wi-Fi manager started.");
     } else {

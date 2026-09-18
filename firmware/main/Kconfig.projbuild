@@ -8,4 +8,18 @@ config PROGRE_WIFI_PASSWORD
     string "Commissioning Wi-Fi password"
     default ""
 
+
+    config PROGRE_BRIDGE_HOST
+        string "Progre Bridge host"
+        default "127.0.0.1"
+        help
+            IPv4 address or hostname of the Progre Voice Bridge.
+
+    config PROGRE_BRIDGE_PORT
+        int "Progre Bridge port"
+        range 1 65535
+        default 8765
+        help
+            TCP port used by the Progre Voice Bridge.
+
 endmenu
