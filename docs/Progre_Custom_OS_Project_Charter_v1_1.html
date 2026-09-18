@@ -192,9 +192,9 @@ coexistence, Talk-button interaction, display behavior, and silent release boot.
 </p>
 </div>
 
-<h2>9. Immediate Target — Phase 1F Connected</h2>
+<h2>9. Immediate Target — Progre Bridge</h2>
 <p>
-The next milestone connects Progre to a local Progre Voice Bridge over Wi-Fi.
+With local Wi-Fi connectivity proven, the next milestone establishes the Progre Bridge protocol between the device and a listener computer or workstation.
 The first usable end-to-end path is:
 </p>
 
@@ -212,22 +212,82 @@ Initial Phase 1F work should remain local-network-first and avoid unnecessary cl
 dependencies.
 </p>
 
-<h2>10. Future Operator Experience</h2>
+<h2>10. Future Operator Experience and Product Direction</h2>
+
 <p>
-The command line remains the developer and recovery interface. Once Progre is stable,
-a separate Progre Cockpit may provide firmware updates, device discovery, Wi-Fi and bridge
-configuration, recovery, logs, audio tests, display controls, personality configuration,
-Japanese settings, and Autonomous OS / Mesh connection status.
+The command line remains the developer, diagnostic, and recovery interface beneath
+Progre. Once the core firmware and Bridge are stable, a Progre Cockpit will provide
+the normal human-facing control and provisioning experience.
 </p>
 
 <p>
-The Cockpit must sit above the low-level tooling rather than replace it.
+The Cockpit is planned as a Flask application launched through <code>main.py</code>.
+It must sit above the proven low-level tooling rather than replace it, allowing the
+same underlying operations to remain inspectable and recoverable by developers.
 </p>
 
-<hr>
-<small>
-Authoritative project checkpoint for the Progre Custom OS effort.
-</small>
+<h3>10.1 User Configuration</h3>
+<ul>
+  <li>Device status, diagnostics, restart, logs, audio tests, and display controls.</li>
+  <li>Speaker volume and other supported device controls.</li>
+  <li>Wi-Fi and network configuration.</li>
+  <li>Listener computer or workstation hostname/address, port, protocol, and connection parameters.</li>
+  <li>Local runtime and model selection, including compatible Rend, OpenClaw, Hermes, and Ollama services.</li>
+  <li>External API provider, endpoint, model, and required connection parameters.</li>
+  <li>Personality, Japanese-learning, and other user-facing Progre configuration.</li>
+</ul>
+
+<p>
+Configuration should be represented as persistent data wherever practical rather
+than compiled firmware constants. Changing a model, listener, network, or other
+normal user preference should not require rebuilding Progre OS.
+</p>
+
+<h3>10.2 Device Lifecycle Management</h3>
+<p>
+The Cockpit is also intended to become the supported device-management interface
+for connected AIPI Lite and Progre hardware.
+</p>
+<ul>
+  <li>Detect and identify a connected compatible device.</li>
+  <li>Read and download a full flash backup of the firmware currently installed on the device.</li>
+  <li>Calculate and retain cryptographic hashes and recovery metadata for backups.</li>
+  <li>Upgrade an existing Progre safely using validated release artifacts.</li>
+  <li>Restore an appropriate recovery image when required.</li>
+</ul>
+
+<h3>10.3 AIPI Lite to Progre Provisioning</h3>
+<p>
+The Cockpit should support a guided provisioning workflow capable of converting
+compatible stock AIPI Lite hardware into a Progre device. A verified full-device
+backup must be created before destructive conversion or full-flash replacement.
+Provisioning should then install the appropriate Progre firmware components,
+configure the device, verify the resulting installation, and record the outcome.
+</p>
+
+<p>
+This workflow is intended both for individual owners and as a future ProgreTech
+builder/provisioning station for preparing premade Progre devices consistently.
+Device records may include hardware identity, original backup hash, installed
+Progre version, firmware hash, provisioning date, validation results, and upgrade
+history.
+</p>
+
+<h3>10.4 Product Direction</h3>
+<p>
+Progre is being developed first as a working ProgreTech companion and engineering
+platform, with a possible path toward a sellable premade product. Progre OS may be
+released as open-source software without requiring the complete product experience
+to be limited to source distribution. Hardware preparation, validated provisioning,
+recovery tooling, Cockpit workflows, configuration, integration, testing, and the
+ready-to-use device experience may form part of the broader Progre product.
+</p>
+
+<p>
+Commercialization must not weaken the project's recovery-first engineering model:
+original firmware preservation, reversible development where practical, explicit
+validation, and safe handling of destructive operations remain core requirements.
+</p>
 
 </body>
 </html>
