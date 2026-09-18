@@ -26,6 +26,10 @@ from runtime_installer import start as installer_start
 from runtime_installer import status as installer_status
 from device_recovery import backup as recovery_backup
 from device_recovery import verified_backup
+from device_recovery import install_preflight
+from device_recovery import restore_preflight
+from device_recovery import install_progre
+from device_recovery import restore_backup
 
 from flask import Flask, jsonify, request
 
@@ -206,6 +210,103 @@ def api_device_recovery_status():
     }
 
 
+@app.post("/api/device/recovery/install")
+def api_device_recovery_install():
+    payload = request.get_json(silent=True) or {}
+
+    if payload.get("confirmation") != "INSTALL PROGRE OS":
+        return {
+            "ok": False,
+            "error": "confirmation_required",
+            "message": "Type INSTALL PROGRE OS exactly to continue.",
+        }, 409
+
+    port = current_device_port()
+
+    if not port:
+        return {
+            "ok": False,
+            "error": "device_not_detected",
+            "message": "Detect the attached AIPI Lite first.",
+        }, 409
+
+    try:
+        # Backend preflight is authoritative and is repeated immediately
+        # before install_progre performs its own fresh recovery gate.
+        install_preflight()
+        return install_progre(port)
+
+    except Exception as exc:
+        return {
+            "ok": False,
+            "error": "install_failed",
+            "message": str(exc),
+        }, 500
+
+
+@app.post("/api/device/recovery/restore")
+def api_device_recovery_restore():
+    payload = request.get_json(silent=True) or {}
+
+    if payload.get("confirmation") != "RESTORE VERIFIED BACKUP":
+        return {
+            "ok": False,
+            "error": "confirmation_required",
+            "message": "Type RESTORE VERIFIED BACKUP exactly to continue.",
+        }, 409
+
+    port = current_device_port()
+
+    if not port:
+        return {
+            "ok": False,
+            "error": "device_not_detected",
+            "message": "Detect the attached AIPI Lite first.",
+        }, 409
+
+    try:
+        restore_preflight()
+        return restore_backup(port)
+
+    except Exception as exc:
+        return {
+            "ok": False,
+            "error": "restore_failed",
+            "message": str(exc),
+        }, 500
+
+
+@app.get("/api/device/recovery/preflight")
+def api_device_recovery_preflight():
+    result = {
+        "ok": True,
+        "install": {
+            "ready": False,
+        },
+        "restore": {
+            "ready": False,
+        },
+    }
+
+    try:
+        result["install"] = install_preflight()
+    except Exception as exc:
+        result["install"] = {
+            "ready": False,
+            "message": str(exc),
+        }
+
+    try:
+        result["restore"] = restore_preflight()
+    except Exception as exc:
+        result["restore"] = {
+            "ready": False,
+            "message": str(exc),
+        }
+
+    return result
+
+
 @app.post("/api/device/recovery/backup")
 def api_device_recovery_backup():
     port = current_device_port()
@@ -233,7 +334,10 @@ def api_device_recovery_backup():
         }, 409
 
     try:
-        result = recovery_backup(port)
+        result = recovery_backup(
+            port,
+            source_state=device.get("state", "unknown"),
+        )
         return result
     except Exception as exc:
         return {
@@ -763,6 +867,27 @@ pre{
 
       <div id="recovery-status"
            class="portability-detail"></div>
+
+      <div id="recovery-preflight"
+           class="portability-note">
+        Install / restore safety state has not been checked yet.
+      </div>
+
+      <div id="destructive-actions"
+           class="portability-actions"
+           style="display:none">
+        <button id="install-progre-button"
+                onclick="installProgreOS()"
+                disabled>
+          Install Progre OS
+        </button>
+
+        <button id="restore-backup-button"
+                onclick="restoreOriginalBackup()"
+                disabled>
+          Restore Verified Backup
+        </button>
+      </div>
     </div>
 
     <div class="portability-card">
@@ -1207,6 +1332,51 @@ async function loadDevice() {
 
     if (backupCapable) {
       try {
+        const pf = await fetch("/api/device/recovery/preflight");
+        const pd = await pf.json();
+
+        const installReady = Boolean(pd.install?.ready);
+        const restoreReady = Boolean(pd.restore?.ready);
+
+        document.getElementById("recovery-preflight").textContent =
+          `Install Progre OS: ${installReady ? "READY" : "BLOCKED"} — ` +
+          `Restore Backup: ${restoreReady ? "READY" : "BLOCKED"}`;
+
+        const destructive =
+          document.getElementById("destructive-actions");
+
+        const installButton =
+          document.getElementById("install-progre-button");
+
+        const restoreButton =
+          document.getElementById("restore-backup-button");
+
+        destructive.style.display = "flex";
+        installButton.disabled = !installReady;
+        restoreButton.disabled = !restoreReady;
+
+        const backupKind =
+          pd.restore?.backup_kind ||
+          pd.restore?.recovery?.backup_kind ||
+          "unknown";
+
+        if (backupKind === "original_stock") {
+          restoreButton.textContent =
+            "Restore Original Stock Backup";
+        } else if (backupKind === "progre_snapshot") {
+          restoreButton.textContent =
+            "Restore Progre Recovery Snapshot";
+        } else {
+          restoreButton.textContent =
+            "Restore Verified Backup";
+        }
+
+      } catch (error) {
+        document.getElementById("recovery-preflight").textContent =
+          "Install / restore safety state unavailable.";
+      }
+
+      try {
         const rr = await fetch("/api/device/recovery");
         const rd = await rr.json();
         const recovery = rd.recovery || {};
@@ -1241,6 +1411,134 @@ async function loadDevice() {
       "Device check unavailable";
   }
 }
+
+async function installProgreOS() {
+  const phrase = prompt(
+    "This will write Progre OS to the attached device.\n\n" +
+    "A verified recovery backup is required.\n\n" +
+    "Type INSTALL PROGRE OS exactly to continue."
+  );
+
+  if (phrase === null) return;
+
+  if (phrase !== "INSTALL PROGRE OS") {
+    alert("Confirmation did not match. Nothing was written.");
+    return;
+  }
+
+  const installButton =
+    document.getElementById("install-progre-button");
+
+  const restoreButton =
+    document.getElementById("restore-backup-button");
+
+  installButton.disabled = true;
+  restoreButton.disabled = true;
+
+  actionProgressStart(
+    "Installing Progre OS — do not disconnect the device…"
+  );
+
+  try {
+    const response = await fetch(
+      "/api/device/recovery/install",
+      {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({confirmation: phrase})
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok || !data.ok) {
+      throw new Error(
+        data.message || data.error || "Installation failed."
+      );
+    }
+
+    actionProgressFinish("Progre OS installation completed");
+    alert("Progre OS installation completed successfully.");
+
+  } catch (error) {
+    actionProgressFail(
+      `Installation failed: ${error.message || error}`
+    );
+
+    alert(
+      "Installation failed. The recovery backup remains available.\n\n" +
+      (error.message || error)
+    );
+
+  } finally {
+    await loadDevice();
+  }
+}
+
+
+async function restoreOriginalBackup() {
+  const phrase = prompt(
+    "This will overwrite the complete device flash with the verified " +
+    "recovery image.\n\n" +
+    "Type RESTORE VERIFIED BACKUP exactly to continue."
+  );
+
+  if (phrase === null) return;
+
+  if (phrase !== "RESTORE VERIFIED BACKUP") {
+    alert("Confirmation did not match. Nothing was written.");
+    return;
+  }
+
+  const installButton =
+    document.getElementById("install-progre-button");
+
+  const restoreButton =
+    document.getElementById("restore-backup-button");
+
+  installButton.disabled = true;
+  restoreButton.disabled = true;
+
+  actionProgressStart(
+    "Restoring verified recovery image — do not disconnect the device…"
+  );
+
+  try {
+    const response = await fetch(
+      "/api/device/recovery/restore",
+      {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({confirmation: phrase})
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok || !data.ok) {
+      throw new Error(
+        data.message || data.error || "Restore failed."
+      );
+    }
+
+    actionProgressFinish("Recovery image restored");
+    alert("Verified recovery image restored successfully.");
+
+  } catch (error) {
+    actionProgressFail(
+      `Restore failed: ${error.message || error}`
+    );
+
+    alert(
+      "Restore failed. Review recovery status before retrying.\n\n" +
+      (error.message || error)
+    );
+
+  } finally {
+    await loadDevice();
+  }
+}
+
 
 async function createRecoveryBackup() {
   const button = document.getElementById("backup-button");
