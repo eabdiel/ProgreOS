@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from flask import Flask, Response, jsonify, request
 
 from progre_config import load_config
+from progre_runtime import discover as runtime_discover
 
 
 APP_NAME = "progre-voice-bridge"
@@ -19,12 +20,7 @@ PROTOCOL_VERSION = 1
 app = Flask(__name__)
 
 
-PROGRE_WHISPER = '/home/edwin/Rend/experiments/whisper-cpp/build/bin/whisper-cli'
-PROGRE_WHISPER_MODEL = '/home/edwin/Rend/experiments/whisper-cpp/models/ggml-base.en.bin'
-PROGRE_PIPER = '/home/edwin/Rend/experiments/autonomous-voice/runtime/piper/piper/piper'
-PROGRE_PIPER_MODEL = '/home/edwin/Rend/experiments/autonomous-voice/runtime/piper/voices/en_US-arctic-medium.onnx'
 PROGRE_OLLAMA_URL = "http://127.0.0.1:11434/api/generate"
-PROGRE_OLLAMA_MODEL = "qwen3.5:2b"
 
 PROGRE_SYSTEM_PROMPT = """
 You are Progre, a small physical desktop companion created as
@@ -195,10 +191,16 @@ def _transcribe(pcm: bytes, workdir: str) -> str:
 
     _pcm_to_wav(pcm, input_wav)
 
+    runtime = runtime_discover()
+    whisper = runtime.get("whisper")
+    whisper_model = runtime.get("whisper_model")
+    if not whisper or not whisper_model:
+        raise RuntimeError("Whisper runtime/model missing. Open Progre Cockpit → Local Runtime.")
+
     result = subprocess.run(
         [
-            PROGRE_WHISPER,
-            "-m", PROGRE_WHISPER_MODEL,
+            whisper,
+            "-m", whisper_model,
             "-f", input_wav,
             "-otxt",
             "-of", output_base,
@@ -277,10 +279,17 @@ def _synthesize(text: str, workdir: str) -> bytes:
     cfg = load_config()
     output_wav = str(Path(workdir) / "response.wav")
 
+    runtime = runtime_discover()
+    piper = runtime.get("piper")
+    voices = [Path(v) for v in runtime.get("voices", [])]
+    voice = next((v for v in voices if v.name == cfg["voice"]), None)
+    if not piper or voice is None:
+        raise RuntimeError("Piper runtime/voice missing. Open Progre Cockpit → Local Runtime.")
+
     result = subprocess.run(
         [
-            PROGRE_PIPER,
-            "--model", Path(PROGRE_PIPER_MODEL).with_name(cfg["voice"]),
+            piper,
+            "--model", str(voice),
             "--output_file", output_wav,
         ],
         input=text + "\n",

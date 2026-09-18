@@ -8,6 +8,7 @@ managed_components/
 __pycache__/
 *.pyc
 .venv/
+.progre-venv/
 
 # Editors
 .vscode/
@@ -25,3 +26,10 @@ wifi.*
 firmware/sdkconfig
 firmware/sdkconfig.old
 bridge/progre_config.local.json
+runtime/sources/
+runtime/whisper/whisper-cli
+runtime/piper/venv/
+runtime/piper/piper
+runtime/models/*.bin
+runtime/voices/*.onnx
+runtime/voices/*.onnx.json

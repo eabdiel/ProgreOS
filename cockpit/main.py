@@ -22,6 +22,8 @@ import urllib.request
 import socket
 
 from device_control import command as device_command
+from runtime_installer import start as installer_start
+from runtime_installer import status as installer_status
 
 from flask import Flask, jsonify, request
 
@@ -204,27 +206,44 @@ def api_install_component(component):
             "error": "unknown_component",
         }, 404
 
-    if component == "ai_model":
-        import subprocess
-        ollama = runtime_discover().get("ollama")
-        model = load_config().get("model", "qwen3.5:2b")
-        if not ollama:
-            return {"ok": False, "error": "ollama_missing", "message": "Install Ollama first."}, 409
-        try:
-            result = subprocess.run([ollama, "pull", model], capture_output=True, text=True, timeout=1800)
-        except Exception as exc:
-            return {"ok": False, "error": "install_failed", "message": str(exc)}, 500
-        if result.returncode != 0:
-            return {"ok": False, "error": "install_failed", "message": result.stderr[-1200:]}, 500
-        return {"ok": True, "component": component, "message": f"Installed {model}."}
+    current = dependency_status().get(component, {})
+
+    if current.get("ready"):
+        return {
+            "ok": True,
+            "component": component,
+            "state": "ready",
+            "message": "Dependency is already ready.",
+        }
+
+    result = installer_start(component)
+
+    if not result.get("ok"):
+        code = 409 if result.get("error") == "already_installing" else 500
+        return result, code
+
+    return result, 202
+
+
+@app.get("/api/install/status")
+def api_install_status_all():
+    return {
+        "ok": True,
+        "jobs": installer_status(),
+        "dependencies": dependency_status(),
+    }
+
+
+@app.get("/api/install/status/<component>")
+def api_install_status_component(component):
+    if component not in dependency_status():
+        return {"ok": False, "error": "unknown_component"}, 404
 
     return {
-        "ok": False,
-        "component": component,
-        "error": "installer_not_implemented",
-        "message": "This component needs a platform-specific installer; the Cockpit detected it but will not run an unsafe guessed installer.",
-    }, 501
-
+        "ok": True,
+        "job": installer_status(component),
+        "dependency": dependency_status().get(component),
+    }
 
 
 
@@ -594,6 +613,53 @@ pre{
   letter-spacing: .8px;
 }
 
+
+/* Progre global action progress */
+#progre-progress {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 9999;
+  display: none;
+  background: #111;
+  border-bottom: 1px solid #333;
+}
+
+#progre-progress.visible {
+  display: block;
+}
+
+#progre-progress-track {
+  height: 4px;
+  background: #222;
+  overflow: hidden;
+}
+
+#progre-progress-bar {
+  height: 100%;
+  width: 0%;
+  background: #fff;
+  transition: width .25s ease;
+}
+
+#progre-progress.indeterminate #progre-progress-bar {
+  width: 35%;
+  animation: progre-progress-slide 1.1s ease-in-out infinite;
+}
+
+#progre-progress-label {
+  padding: 7px 18px;
+  font-size: 12px;
+  letter-spacing: .04em;
+  color: #ddd;
+}
+
+@keyframes progre-progress-slide {
+  0%   { transform: translateX(-110%); }
+  100% { transform: translateX(310%); }
+}
+
 </style>
 </head>
 
@@ -666,6 +732,13 @@ pre{
 </section>
 
 
+
+<div id="progre-progress">
+  <div id="progre-progress-track">
+    <div id="progre-progress-bar"></div>
+  </div>
+  <div id="progre-progress-label">Working…</div>
+</div>
 
 <header>
  <div class="brand">
@@ -889,6 +962,105 @@ function esc(value) {
     .replaceAll('"', "&quot;");
 }
 
+
+let progreProgressTimer = null;
+
+function actionProgressStart(label, percent=null) {
+  const box = document.getElementById("progre-progress");
+  const bar = document.getElementById("progre-progress-bar");
+  const text = document.getElementById("progre-progress-label");
+
+  if (!box || !bar || !text) return;
+
+  clearTimeout(progreProgressTimer);
+
+  text.textContent = label || "Working…";
+  box.classList.add("visible");
+
+  if (percent === null) {
+    box.classList.add("indeterminate");
+    bar.style.width = "35%";
+  } else {
+    box.classList.remove("indeterminate");
+    bar.style.width = `${Math.max(0, Math.min(100, percent))}%`;
+  }
+}
+
+function actionProgressUpdate(label, percent=null) {
+  actionProgressStart(label, percent);
+}
+
+function actionProgressFinish(label="Complete") {
+  const box = document.getElementById("progre-progress");
+  const bar = document.getElementById("progre-progress-bar");
+  const text = document.getElementById("progre-progress-label");
+
+  if (!box || !bar || !text) return;
+
+  box.classList.remove("indeterminate");
+  bar.style.width = "100%";
+  text.textContent = label;
+
+  clearTimeout(progreProgressTimer);
+
+  progreProgressTimer = setTimeout(() => {
+    box.classList.remove("visible");
+    bar.style.width = "0%";
+  }, 900);
+}
+
+function actionProgressFail(label="Action failed") {
+  const box = document.getElementById("progre-progress");
+  const text = document.getElementById("progre-progress-label");
+
+  if (!box || !text) return;
+
+  box.classList.remove("indeterminate");
+  text.textContent = label;
+
+  clearTimeout(progreProgressTimer);
+
+  progreProgressTimer = setTimeout(() => {
+    box.classList.remove("visible");
+  }, 3000);
+}
+
+async function waitForInstall(component, label) {
+  while (true) {
+    await new Promise(resolve => setTimeout(resolve, 1000));
+
+    const response = await fetch(`/api/install/status/${component}`);
+    const data = await response.json();
+
+    if (!response.ok || !data.ok) {
+      throw new Error(data.error || "Unable to read installer status.");
+    }
+
+    const job = data.job || {};
+    const dependency = data.dependency || {};
+
+    if (job.state === "ready" || dependency.ready) {
+      actionProgressFinish(`${label} ready`);
+      await loadRuntime();
+      return;
+    }
+
+    if (job.state === "failed") {
+      throw new Error(job.error || `${label} installation failed.`);
+    }
+
+    const percent =
+      typeof job.progress === "number" && job.progress > 0
+        ? job.progress
+        : null;
+
+    actionProgressUpdate(
+      job.message || `Installing ${label}…`,
+      percent
+    );
+  }
+}
+
 async function loadRuntime() {
   const target = document.getElementById("runtime-list");
 
@@ -981,6 +1153,20 @@ async function detectAipi() {
 }
 
 async function installDependency(component) {
+  const labels = {
+    whisper: "Whisper Speech Recognition",
+    whisper_model: "Whisper Speech Model",
+    ollama: "Ollama Local AI Runtime",
+    ai_model: "Local AI Model",
+    piper: "Piper Speech Engine",
+    voice: "Progre Voice",
+    ffmpeg: "FFmpeg Audio Processor"
+  };
+
+  const label = labels[component] || component;
+
+  actionProgressStart(`Starting ${label}…`);
+
   try {
     const response = await fetch(`/api/install/${component}`, {
       method: "POST"
@@ -988,20 +1174,31 @@ async function installDependency(component) {
 
     const data = await response.json();
 
-    if (data.error === "installer_not_implemented") {
-      alert(data.message || "Installer is not available on this platform yet.");
+    if (response.status === 409 &&
+        data.error === "already_installing") {
+      actionProgressUpdate(`${label} is already installing…`);
+      await waitForInstall(component, label);
       return;
     }
 
     if (!response.ok) {
-      alert(data.error || "Installation failed.");
+      throw new Error(
+        data.message || data.error || "Installation failed."
+      );
+    }
+
+    if (data.state === "ready") {
+      actionProgressFinish(`${label} ready`);
+      await loadRuntime();
       return;
     }
 
-    await loadRuntime();
+    actionProgressUpdate(`Installing ${label}…`);
+    await waitForInstall(component, label);
 
   } catch (error) {
-    alert("Installer request failed: " + error);
+    console.error(error);
+    actionProgressFail(`${label}: ${error.message || error}`);
   }
 }
 
