@@ -38,6 +38,24 @@ static bool talk_button_raw_pressed(void)
     return gpio_get_level(PROGRE_BUTTON_TALK_PIN) == 0;
 }
 
+
+enum {
+    PROGRE_CAPTURE_MAX_SECONDS = 2,
+    PROGRE_CAPTURE_MAX_FRAMES =
+        PROGRE_AUDIO_SAMPLE_RATE *
+        PROGRE_CAPTURE_MAX_SECONDS,
+    PROGRE_RESPONSE_MAX_FRAMES =
+        PROGRE_AUDIO_SAMPLE_RATE
+};
+
+static int16_t s_voice_capture[
+    PROGRE_CAPTURE_MAX_FRAMES
+];
+
+static int16_t s_voice_response[
+    PROGRE_RESPONSE_MAX_FRAMES
+];
+
 void app_main(void)
 {
     ESP_LOGI(TAG, "================================");
@@ -87,7 +105,8 @@ void app_main(void)
 
     TickType_t candidate_since = xTaskGetTickCount();
     TickType_t last_blink = xTaskGetTickCount();
-    TickType_t last_mic_measure = 0;
+    size_t voice_capture_frames = 0;
+    bool voice_capture_full = false;
 
     if (stable_pressed) {
         ESP_LOGI(TAG, "Talk button held at startup.");
@@ -114,36 +133,123 @@ void app_main(void)
 
             if (stable_pressed) {
                 ESP_LOGI(TAG, "Talk button PRESSED — listening");
+                voice_capture_frames = 0;
+                voice_capture_full = false;
                 progre_display_set_blink(true);
             } else {
-                ESP_LOGI(TAG, "Talk button RELEASED — idle");
+                ESP_LOGI(
+                    TAG,
+                    "Talk button RELEASED — captured %u frames",
+                    (unsigned)voice_capture_frames
+                );
+
                 progre_display_set_blink(false);
                 last_blink = now;
+
+                if (microphone_ready &&
+                    voice_capture_frames > 0) {
+
+                    size_t response_frames = 0;
+
+                    ESP_LOGI(
+                        TAG,
+                        "Sending utterance to Progre Bridge"
+                    );
+
+                    esp_err_t bridge_result =
+                        progre_bridge_exchange_audio(
+                            s_voice_capture,
+                            voice_capture_frames,
+                            s_voice_response,
+                            PROGRE_RESPONSE_MAX_FRAMES,
+                            &response_frames
+                        );
+
+                    if (bridge_result == ESP_OK &&
+                        response_frames > 0) {
+
+                        ESP_LOGI(
+                            TAG,
+                            "Bridge response ready — speaking"
+                        );
+
+                        esp_err_t play_result =
+                            progre_audio_play_mono(
+                                s_voice_response,
+                                response_frames
+                            );
+
+                        if (play_result != ESP_OK) {
+                            ESP_LOGW(
+                                TAG,
+                                "Bridge audio playback failed: %s",
+                                esp_err_to_name(play_result)
+                            );
+                        }
+                    } else {
+                        ESP_LOGW(
+                            TAG,
+                            "Bridge audio exchange failed: %s",
+                            esp_err_to_name(bridge_result)
+                        );
+                    }
+                }
             }
         }
 
         /*
-         * Hardware microphone validation.
+         * Capture microphone PCM while Talk is held.
          *
-         * While the talk button is held, capture a short window
-         * approximately four times per second and report signal
-         * statistics for both I2S slots.
+         * The public audio API extracts one slot from the duplicated
+         * stereo microphone stream, producing 16 kHz signed-16 mono.
          */
-        if (stable_pressed && microphone_ready &&
-            (last_mic_measure == 0 ||
-             (now - last_mic_measure) >=
-                 pdMS_TO_TICKS(MIC_MEASURE_INTERVAL_MS))) {
+        if (stable_pressed &&
+            microphone_ready &&
+            !voice_capture_full) {
 
-            esp_err_t mic_result =
-                progre_audio_measure_microphone();
+            size_t remaining =
+                PROGRE_CAPTURE_MAX_FRAMES -
+                voice_capture_frames;
 
-            if (mic_result != ESP_OK) {
-                ESP_LOGW(TAG,
-                         "Microphone measurement unavailable: %s",
-                         esp_err_to_name(mic_result));
+            if (remaining > 0) {
+
+                size_t captured_now = 0;
+
+                esp_err_t capture_result =
+                    progre_audio_capture_mono(
+                        &s_voice_capture[
+                            voice_capture_frames
+                        ],
+                        remaining,
+                        &captured_now,
+                        50
+                    );
+
+                if (capture_result == ESP_OK) {
+                    voice_capture_frames +=
+                        captured_now;
+                } else if (
+                    capture_result != ESP_ERR_TIMEOUT
+                ) {
+                    ESP_LOGW(
+                        TAG,
+                        "Microphone capture unavailable: %s",
+                        esp_err_to_name(capture_result)
+                    );
+                }
             }
 
-            last_mic_measure = xTaskGetTickCount();
+            if (voice_capture_frames >=
+                PROGRE_CAPTURE_MAX_FRAMES) {
+
+                voice_capture_full = true;
+
+                ESP_LOGI(
+                    TAG,
+                    "Voice capture reached %d-second commissioning limit",
+                    PROGRE_CAPTURE_MAX_SECONDS
+                );
+            }
         }
 
         /*

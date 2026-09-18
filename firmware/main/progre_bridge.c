@@ -197,3 +197,192 @@ esp_err_t progre_bridge_init(void)
 
     return ESP_OK;
 }
+
+
+typedef struct {
+    uint8_t *data;
+    size_t capacity;
+    size_t length;
+    bool overflow;
+} bridge_audio_response_t;
+
+
+static esp_err_t bridge_audio_http_event(
+    esp_http_client_event_t *evt)
+{
+    bridge_audio_response_t *response =
+        evt->user_data;
+
+    if (evt->event_id == HTTP_EVENT_ON_DATA &&
+        response != NULL &&
+        evt->data != NULL &&
+        evt->data_len > 0) {
+
+        size_t incoming =
+            (size_t)evt->data_len;
+
+        size_t available =
+            response->capacity - response->length;
+
+        if (incoming > available) {
+            response->overflow = true;
+            incoming = available;
+        }
+
+        if (incoming > 0) {
+            memcpy(
+                response->data + response->length,
+                evt->data,
+                incoming
+            );
+
+            response->length += incoming;
+        }
+    }
+
+    return ESP_OK;
+}
+
+
+esp_err_t progre_bridge_exchange_audio(
+    const int16_t *request_samples,
+    size_t request_frames,
+    int16_t *response_samples,
+    size_t response_capacity_frames,
+    size_t *response_frames)
+{
+    if (request_samples == NULL ||
+        request_frames == 0 ||
+        response_samples == NULL ||
+        response_capacity_frames == 0 ||
+        response_frames == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    *response_frames = 0;
+
+    char url[160];
+
+    snprintf(
+        url,
+        sizeof(url),
+        "http://%s:%d/api/v1/audio",
+        CONFIG_PROGRE_BRIDGE_HOST,
+        CONFIG_PROGRE_BRIDGE_PORT
+    );
+
+    bridge_audio_response_t response = {
+        .data = (uint8_t *)response_samples,
+        .capacity =
+            response_capacity_frames *
+            sizeof(int16_t),
+        .length = 0,
+        .overflow = false,
+    };
+
+    esp_http_client_config_t config = {
+        .url = url,
+        .event_handler = bridge_audio_http_event,
+        .user_data = &response,
+        .timeout_ms = 10000,
+        .buffer_size = 1024,
+        .buffer_size_tx = 1024,
+    };
+
+    esp_http_client_handle_t client =
+        esp_http_client_init(&config);
+
+    if (client == NULL) {
+        return ESP_ERR_NO_MEM;
+    }
+
+    esp_http_client_set_method(
+        client,
+        HTTP_METHOD_POST
+    );
+
+    esp_http_client_set_header(
+        client,
+        "Content-Type",
+        "application/octet-stream"
+    );
+
+    esp_http_client_set_header(
+        client,
+        "X-Progre-Audio-Format",
+        "pcm_s16le_mono_16000"
+    );
+
+    esp_http_client_set_post_field(
+        client,
+        (const char *)request_samples,
+        request_frames * sizeof(int16_t)
+    );
+
+    ESP_LOGI(
+        TAG,
+        "AUDIO -> Bridge: %u frames / %u bytes",
+        (unsigned)request_frames,
+        (unsigned)(
+            request_frames * sizeof(int16_t)
+        )
+    );
+
+    esp_err_t result =
+        esp_http_client_perform(client);
+
+    if (result == ESP_OK) {
+
+        int status =
+            esp_http_client_get_status_code(client);
+
+        ESP_LOGI(
+            TAG,
+            "Audio HTTP status: %d",
+            status
+        );
+
+        if (status != 200) {
+            result = ESP_FAIL;
+        } else if (response.overflow) {
+            ESP_LOGE(
+                TAG,
+                "Bridge audio response exceeded buffer"
+            );
+
+            result = ESP_ERR_NO_MEM;
+        } else if (
+            response.length == 0 ||
+            (response.length % sizeof(int16_t)) != 0
+        ) {
+            ESP_LOGE(
+                TAG,
+                "Invalid Bridge audio response length: %u",
+                (unsigned)response.length
+            );
+
+            result = ESP_ERR_INVALID_SIZE;
+        } else {
+            *response_frames =
+                response.length /
+                sizeof(int16_t);
+
+            ESP_LOGI(
+                TAG,
+                "AUDIO <- Bridge: %u frames / %u bytes",
+                (unsigned)*response_frames,
+                (unsigned)response.length
+            );
+        }
+    } else {
+        ESP_LOGE(
+            TAG,
+            "Audio Bridge request failed: %s",
+            esp_err_to_name(result)
+        );
+    }
+
+    esp_http_client_cleanup(client);
+
+    return result;
+}

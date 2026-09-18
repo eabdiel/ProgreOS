@@ -601,3 +601,252 @@ cleanup:
 
     return result;
 }
+
+/*
+ * ----------------------------------------------------------------
+ * Progre application audio primitives
+ * ----------------------------------------------------------------
+ *
+ * These functions intentionally reuse the already-running paired
+ * I2S transport established by progre_audio_init_microphone().
+ *
+ * Neither function disables s_tx or s_rx.
+ */
+
+esp_err_t progre_audio_capture_mono(
+    int16_t *samples,
+    size_t capacity_frames,
+    size_t *frames_captured,
+    uint32_t timeout_ms)
+{
+    if (samples == NULL ||
+        frames_captured == NULL ||
+        capacity_frames == 0) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    if (s_rx == NULL) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    enum {
+        CAPTURE_CHUNK_FRAMES = 320
+    };
+
+    int16_t stereo[CAPTURE_CHUNK_FRAMES * 2];
+
+    size_t requested_frames =
+        capacity_frames < CAPTURE_CHUNK_FRAMES
+            ? capacity_frames
+            : CAPTURE_CHUNK_FRAMES;
+
+    size_t bytes_read = 0;
+
+    esp_err_t err = i2s_channel_read(
+        s_rx,
+        stereo,
+        requested_frames * 2 * sizeof(int16_t),
+        &bytes_read,
+        timeout_ms
+    );
+
+    if (err != ESP_OK) {
+        *frames_captured = 0;
+        return err;
+    }
+
+    size_t stereo_samples =
+        bytes_read / sizeof(int16_t);
+
+    size_t frames =
+        stereo_samples / 2;
+
+    if (frames > capacity_frames) {
+        frames = capacity_frames;
+    }
+
+    for (size_t i = 0; i < frames; ++i) {
+        samples[i] = stereo[i * 2];
+    }
+
+    *frames_captured = frames;
+
+    return ESP_OK;
+}
+
+
+esp_err_t progre_audio_play_mono(
+    const int16_t *samples,
+    size_t frame_count)
+{
+    if (samples == NULL || frame_count == 0) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    if (s_codec == NULL || s_tx == NULL) {
+        ESP_LOGE(
+            TAG,
+            "PCM playback requested before audio initialization"
+        );
+
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    enum {
+        PLAYBACK_CHUNK_FRAMES = 320
+    };
+
+    int16_t stereo[PLAYBACK_CHUNK_FRAMES * 2];
+
+    esp_err_t result = ESP_OK;
+    size_t bytes_written = 0;
+
+    /*
+     * Prime the already-running TX path with silence while the
+     * analog output remains muted.
+     */
+    for (size_t i = 0;
+         i < PLAYBACK_CHUNK_FRAMES * 2;
+         ++i) {
+        stereo[i] = 0;
+    }
+
+    result = i2s_channel_write(
+        s_tx,
+        stereo,
+        sizeof(stereo),
+        &bytes_written,
+        250
+    );
+
+    if (result != ESP_OK) {
+        ESP_LOGE(
+            TAG,
+            "Unable to prime PCM playback: %s",
+            esp_err_to_name(result)
+        );
+
+        goto cleanup;
+    }
+
+    result = codec_write_checked(0x31, 0x00);
+
+    if (result != ESP_OK) {
+        goto cleanup;
+    }
+
+    result =
+        gpio_set_level(PROGRE_AUDIO_SPK_EN_PIN, 1);
+
+    if (result != ESP_OK) {
+        ESP_LOGE(
+            TAG,
+            "Unable to enable speaker amplifier: %s",
+            esp_err_to_name(result)
+        );
+
+        goto cleanup;
+    }
+
+    ESP_LOGI(
+        TAG,
+        "PCM playback starting: %u mono frames",
+        (unsigned)frame_count
+    );
+
+    size_t offset = 0;
+
+    while (offset < frame_count) {
+
+        size_t chunk =
+            frame_count - offset;
+
+        if (chunk > PLAYBACK_CHUNK_FRAMES) {
+            chunk = PLAYBACK_CHUNK_FRAMES;
+        }
+
+        for (size_t i = 0; i < chunk; ++i) {
+            int16_t sample = samples[offset + i];
+
+            stereo[i * 2] = sample;
+            stereo[i * 2 + 1] = sample;
+        }
+
+        bytes_written = 0;
+
+        result = i2s_channel_write(
+            s_tx,
+            stereo,
+            chunk * 2 * sizeof(int16_t),
+            &bytes_written,
+            500
+        );
+
+        if (result != ESP_OK) {
+            ESP_LOGE(
+                TAG,
+                "PCM speaker TX failed: %s",
+                esp_err_to_name(result)
+            );
+
+            goto cleanup;
+        }
+
+        offset += chunk;
+    }
+
+    /*
+     * Trailing silence before closing the analog output.
+     */
+    for (size_t i = 0;
+         i < PLAYBACK_CHUNK_FRAMES * 2;
+         ++i) {
+        stereo[i] = 0;
+    }
+
+    bytes_written = 0;
+
+    result = i2s_channel_write(
+        s_tx,
+        stereo,
+        sizeof(stereo),
+        &bytes_written,
+        250
+    );
+
+cleanup:
+
+    /*
+     * Always make the physical speaker inaudible again.
+     * The digital TX/RX channels remain RUNNING.
+     */
+    {
+        esp_err_t amp_err =
+            gpio_set_level(
+                PROGRE_AUDIO_SPK_EN_PIN,
+                0
+            );
+
+        esp_err_t mute_err =
+            codec_write_checked(0x31, 0x60);
+
+        if (result == ESP_OK &&
+            amp_err != ESP_OK) {
+            result = amp_err;
+        }
+
+        if (result == ESP_OK &&
+            mute_err != ESP_OK) {
+            result = mute_err;
+        }
+    }
+
+    if (result == ESP_OK) {
+        ESP_LOGI(
+            TAG,
+            "PCM playback complete; duplex I2S remains RUNNING"
+        );
+    }
+
+    return result;
+}
