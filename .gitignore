@@ -33,3 +33,7 @@ runtime/piper/piper
 runtime/models/*.bin
 runtime/voices/*.onnx
 runtime/voices/*.onnx.json
+
+# Progre local device lifecycle / recovery state
+data/device/*
+!data/device/.gitkeep

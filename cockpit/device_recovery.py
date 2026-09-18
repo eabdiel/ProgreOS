@@ -97,9 +97,9 @@ def backup(serial_port: str):
     cmd = _esptool_command() + [
         "--chip", "esp32s3",
         "--port", serial_port,
-        "--before", "default-reset",
-        "--after", "hard-reset",
-        "read-flash",
+        "--before", "default_reset",
+        "--after", "hard_reset",
+        "read_flash",
         "0x0",
         hex(FLASH_SIZE),
         str(partial),

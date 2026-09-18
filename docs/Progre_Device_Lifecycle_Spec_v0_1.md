@@ -103,3 +103,33 @@ Connect AIPI Lite by USB
 -> configure network
 -> establish the local Progre runtime
 -> ready
+
+## Phase 1L Recovery Backup Acceptance
+
+The Cockpit recovery-backup path has been physically validated on AIPI
+Lite / ESP32-S3 hardware.
+
+The accepted implementation:
+
+- detects compatible hardware through Cockpit
+- performs a read-only complete 16 MiB flash backup
+- uses ESPTool 5.x command syntax
+- writes first to a temporary `.partial` file
+- requires an exact 16,777,216-byte result
+- calculates and records SHA-256
+- promotes the backup only after verification
+- records verified recovery state in the local lifecycle manifest
+- revalidates the file before it can satisfy a destructive-operation gate
+- hard-resets the device after the completed read
+
+The recovery module contains no flash-write, flash-erase, or eFuse-write
+operation at this checkpoint.
+
+Physical acceptance completed 2026-09-18.
+
+Observed baseline full-flash read time was approximately 24 minutes.
+Performance optimization is deferred; recovery correctness and safety take
+priority over backup speed for this checkpoint.
+
+A verified backup is the prerequisite for future guarded stock-to-Progre
+installation and restore functionality.

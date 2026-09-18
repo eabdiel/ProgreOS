@@ -24,6 +24,8 @@ import socket
 from device_control import command as device_command
 from runtime_installer import start as installer_start
 from runtime_installer import status as installer_status
+from device_recovery import backup as recovery_backup
+from device_recovery import verified_backup
 
 from flask import Flask, jsonify, request
 
@@ -194,6 +196,51 @@ def api_device_detect():
     LIFECYCLE_FILE.parent.mkdir(parents=True, exist_ok=True)
     LIFECYCLE_FILE.write_text(json.dumps(lifecycle, indent=2) + "\n")
     return {"ok": True, "implemented": True, "device": lifecycle}
+
+
+@app.get("/api/device/recovery")
+def api_device_recovery_status():
+    return {
+        "ok": True,
+        "recovery": verified_backup(),
+    }
+
+
+@app.post("/api/device/recovery/backup")
+def api_device_recovery_backup():
+    port = current_device_port()
+
+    if not port:
+        return {
+            "ok": False,
+            "error": "device_not_detected",
+            "message": "Detect the attached AIPI Lite first.",
+        }, 409
+
+    detection = load_lifecycle().get("detection", {})
+    state = detection.get("state")
+
+    if state not in {
+        "stock_or_unknown",
+        "compatible_detected",
+        "port_busy_or_recovery",
+        "progre_detected",
+    }:
+        return {
+            "ok": False,
+            "error": "backup_not_available",
+            "message": "The attached hardware is not in a backup-capable state.",
+        }, 409
+
+    try:
+        result = recovery_backup(port)
+        return result
+    except Exception as exc:
+        return {
+            "ok": False,
+            "error": "backup_failed",
+            "message": str(exc),
+        }, 500
 
 
 @app.post("/api/install/<component>")
@@ -704,6 +751,18 @@ pre{
         Recovery and stock-firmware protection will appear here
         when compatible hardware is detected.
       </div>
+
+      <div id="recovery-actions"
+           class="portability-actions"
+           style="display:none">
+        <button id="backup-button"
+                onclick="createRecoveryBackup()">
+          Create Recovery Backup
+        </button>
+      </div>
+
+      <div id="recovery-status"
+           class="portability-detail"></div>
     </div>
 
     <div class="portability-card">
@@ -1127,9 +1186,135 @@ async function loadDevice() {
       detection.message ||
       "Recovery and stock-firmware protection will appear here when compatible hardware is detected.";
 
+    const recoveryActions =
+      document.getElementById("recovery-actions");
+
+    const recoveryStatus =
+      document.getElementById("recovery-status");
+
+    const backupButton =
+      document.getElementById("backup-button");
+
+    const backupCapable = [
+      "stock_or_unknown",
+      "compatible_detected",
+      "port_busy_or_recovery",
+      "progre_detected"
+    ].includes(state);
+
+    recoveryActions.style.display =
+      backupCapable ? "flex" : "none";
+
+    if (backupCapable) {
+      try {
+        const rr = await fetch("/api/device/recovery");
+        const rd = await rr.json();
+        const recovery = rd.recovery || {};
+
+        if (recovery.verified) {
+          recoveryStatus.textContent =
+            `Verified recovery backup available — ` +
+            `${Number(recovery.size).toLocaleString()} bytes — ` +
+            `SHA-256 ${String(recovery.sha256).slice(0, 12)}…`;
+
+          backupButton.textContent =
+            "Create New Recovery Backup";
+        } else {
+          recoveryStatus.textContent =
+            state === "stock_or_unknown"
+              ? "A verified full-flash backup is required before Progre OS can be installed."
+              : "No verified recovery backup is currently recorded.";
+
+          backupButton.textContent =
+            "Create Recovery Backup";
+        }
+      } catch (error) {
+        recoveryStatus.textContent =
+          "Recovery status unavailable.";
+      }
+    } else {
+      recoveryStatus.textContent = "";
+    }
+
   } catch (error) {
     document.getElementById("device-state").textContent =
       "Device check unavailable";
+  }
+}
+
+async function createRecoveryBackup() {
+  const button = document.getElementById("backup-button");
+  const status = document.getElementById("recovery-status");
+
+  if (!confirm(
+    "Create a complete recovery backup of the attached AIPI Lite? " +
+    "This is read-only and may take a few minutes."
+  )) return;
+
+  if (button) {
+    button.disabled = true;
+    button.textContent = "Backing up…";
+  }
+
+  status.textContent =
+    "Reading and verifying the complete 16 MiB device flash…";
+
+  actionProgressStart(
+    "Creating verified AIPI recovery backup…"
+  );
+
+  try {
+    const response = await fetch(
+      "/api/device/recovery/backup",
+      {method: "POST"}
+    );
+
+    const data = await response.json();
+
+    if (!response.ok || !data.ok || !data.verified) {
+      throw new Error(
+        data.message ||
+        data.error ||
+        "Recovery backup failed."
+      );
+    }
+
+    status.textContent =
+      `Verified recovery backup created — ` +
+      `${Number(data.size).toLocaleString()} bytes — ` +
+      `SHA-256 ${String(data.sha256).slice(0, 12)}…`;
+
+    actionProgressFinish(
+      "Recovery backup verified"
+    );
+
+    await loadDevice();
+
+  } catch (error) {
+    status.textContent =
+      "Recovery backup failed: " +
+      (error.message || error);
+
+    actionProgressFail(
+      `Recovery backup failed: ${error.message || error}`
+    );
+
+  } finally {
+    if (button) {
+      button.disabled = false;
+
+      try {
+        const response = await fetch("/api/device/recovery");
+        const data = await response.json();
+
+        button.textContent =
+          data.recovery?.verified
+            ? "Create New Recovery Backup"
+            : "Create Recovery Backup";
+      } catch (error) {
+        button.textContent = "Create Recovery Backup";
+      }
+    }
   }
 }
 
