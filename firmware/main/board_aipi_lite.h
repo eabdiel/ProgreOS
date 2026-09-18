@@ -10,4 +10,10 @@
 #define PROGRE_LCD_PIN_RST     18
 #define PROGRE_LCD_PIN_BL       3
 
+/*
+ * AIPI Lite right-side function / Talk button.
+ * Active-low with internal pull-up.
+ */
+#define PROGRE_BUTTON_TALK_PIN  42
+
 #define PROGRE_LCD_SPI_HZ      (20 * 1000 * 1000)
