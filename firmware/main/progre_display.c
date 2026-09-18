@@ -193,14 +193,28 @@ static void draw_word_progre(void)
 static void draw_face(bool blink)
 {
     /*
-     * Simplified Progre face:
-     * magenta frame, two eyes, central zig-zag mark.
+     * Progre Face v0.2
+     *
+     * Monochrome mascot face:
+     * - dark-gray structural frame
+     * - white expressive eyes
+     * - small centered mouth
+     *
+     * Keep the eye geometry aligned with the proven First Light
+     * blink regions.
      */
 
-    lcd_fill_rect(25, 22, 78, 3, COLOR_DARK_GRAY);
-    lcd_fill_rect(25, 22, 3, 60, COLOR_DARK_GRAY);
-    lcd_fill_rect(100, 22, 3, 60, COLOR_DARK_GRAY);
-    lcd_fill_rect(25, 79, 78, 3, COLOR_DARK_GRAY);
+    /* Main face frame with clipped/chamfered corners. */
+    lcd_fill_rect(31, 20, 66, 3, COLOR_DARK_GRAY);
+    lcd_fill_rect(25, 26, 3, 50, COLOR_DARK_GRAY);
+    lcd_fill_rect(100, 26, 3, 50, COLOR_DARK_GRAY);
+    lcd_fill_rect(31, 79, 66, 3, COLOR_DARK_GRAY);
+
+    /* Corner accents give the square face a softer mascot shape. */
+    lcd_fill_rect(28, 23, 6, 3, COLOR_DARK_GRAY);
+    lcd_fill_rect(94, 23, 6, 3, COLOR_DARK_GRAY);
+    lcd_fill_rect(28, 76, 6, 3, COLOR_DARK_GRAY);
+    lcd_fill_rect(94, 76, 6, 3, COLOR_DARK_GRAY);
 
     if (blink) {
         lcd_fill_rect(39, 43, 15, 3, COLOR_WHITE);
@@ -210,12 +224,20 @@ static void draw_face(bool blink)
         lcd_fill_rect(78, 40, 7, 9, COLOR_WHITE);
     }
 
-    /* center zig-zag */
-    lcd_fill_rect(58, 55, 12, 3, COLOR_WHITE);
-    lcd_fill_rect(67, 58, 3, 8, COLOR_WHITE);
-    lcd_fill_rect(58, 63, 12, 3, COLOR_WHITE);
-    lcd_fill_rect(58, 66, 3, 8, COLOR_WHITE);
-    lcd_fill_rect(58, 71, 12, 3, COLOR_WHITE);
+    /*
+     * Small neutral-friendly mouth.
+     *
+     *      _____
+     *     |_____|
+     *
+     * This intentionally replaces the First Light zig-zag/"2".
+     * Future expression states can alter this independently of
+     * the eyes and face structure.
+     */
+    lcd_fill_rect(57, 62, 14, 3, COLOR_WHITE);
+    lcd_fill_rect(57, 65, 3, 4, COLOR_WHITE);
+    lcd_fill_rect(68, 65, 3, 4, COLOR_WHITE);
+    lcd_fill_rect(60, 69, 8, 2, COLOR_WHITE);
 }
 
 esp_err_t progre_display_init(void)
