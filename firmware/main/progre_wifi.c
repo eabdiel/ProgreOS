@@ -8,12 +8,14 @@
 #include "esp_netif.h"
 #include "esp_wifi.h"
 #include "nvs_flash.h"
+#include "progre_settings.h"
 
 #include "sdkconfig.h"
 
 static const char *TAG = "PROGRE_WIFI";
 static progre_wifi_state_t s_state = PROGRE_WIFI_OFFLINE;
 static unsigned s_retry_count = 0;
+static bool s_commissioning_scan = false;
 
 #define PROGRE_WIFI_MAX_RETRIES 10
 
@@ -56,6 +58,11 @@ static void wifi_event_handler(void *arg,
 
     if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
         set_state(PROGRE_WIFI_OFFLINE);
+
+        if (s_commissioning_scan) {
+            ESP_LOGI(TAG, "Automatic reconnect paused for commissioning scan");
+            return;
+        }
 
         if (s_retry_count < PROGRE_WIFI_MAX_RETRIES) {
             ++s_retry_count;
@@ -129,15 +136,12 @@ esp_err_t progre_wifi_init(void)
         "IP handler registration failed"
     );
 
+    ESP_RETURN_ON_ERROR(progre_settings_init(), TAG, "settings init failed");
+
     wifi_config_t wifi_cfg = {0};
 
-    strlcpy((char *)wifi_cfg.sta.ssid,
-            CONFIG_PROGRE_WIFI_SSID,
-            sizeof(wifi_cfg.sta.ssid));
-
-    strlcpy((char *)wifi_cfg.sta.password,
-            CONFIG_PROGRE_WIFI_PASSWORD,
-            sizeof(wifi_cfg.sta.password));
+    strlcpy((char *)wifi_cfg.sta.ssid, progre_settings_wifi_ssid(), sizeof(wifi_cfg.sta.ssid));
+    strlcpy((char *)wifi_cfg.sta.password, progre_settings_wifi_password(), sizeof(wifi_cfg.sta.password));
 
     wifi_cfg.sta.threshold.authmode = WIFI_AUTH_WPA2_PSK;
 
@@ -153,8 +157,84 @@ esp_err_t progre_wifi_init(void)
         "station config failed"
     );
 
-    ESP_LOGI(TAG, "Wi-Fi station initialized for SSID '%s'",
-             CONFIG_PROGRE_WIFI_SSID);
+    ESP_LOGI(TAG, "Wi-Fi station initialized for SSID '%s'", progre_settings_wifi_ssid());
 
     return esp_wifi_start();
+}
+
+
+esp_err_t progre_wifi_scan(progre_wifi_network_t *networks, size_t max_networks, size_t *count)
+{
+    if (!networks || !count || max_networks == 0) return ESP_ERR_INVALID_ARG;
+
+    *count = 0;
+    s_commissioning_scan = true;
+
+    esp_err_t disconnect_err = esp_wifi_disconnect();
+    if (disconnect_err != ESP_OK &&
+        disconnect_err != ESP_ERR_WIFI_NOT_CONNECT) {
+        s_commissioning_scan = false;
+        return disconnect_err;
+    }
+
+    vTaskDelay(pdMS_TO_TICKS(250));
+
+    wifi_scan_config_t cfg = {0};
+    esp_err_t err = esp_wifi_scan_start(&cfg, true);
+
+    if (err == ESP_OK) {
+        uint16_t n = (uint16_t)(max_networks > 32 ? 32 : max_networks);
+        wifi_ap_record_t records[32];
+
+        err = esp_wifi_scan_get_ap_records(&n, records);
+
+        if (err == ESP_OK) {
+            for (uint16_t i = 0; i < n; ++i) {
+                strlcpy(
+                    networks[i].ssid,
+                    (const char *)records[i].ssid,
+                    sizeof(networks[i].ssid)
+                );
+                networks[i].rssi = records[i].rssi;
+            }
+            *count = n;
+        }
+    }
+
+    s_commissioning_scan = false;
+
+    s_retry_count = 0;
+    set_state(PROGRE_WIFI_CONNECTING);
+
+    esp_err_t reconnect_err = esp_wifi_connect();
+
+    if (err != ESP_OK) return err;
+
+    if (reconnect_err != ESP_OK &&
+        reconnect_err != ESP_ERR_WIFI_CONN) {
+        ESP_LOGW(TAG, "Post-scan reconnect returned: %s",
+                 esp_err_to_name(reconnect_err));
+    }
+
+    return ESP_OK;
+}
+
+esp_err_t progre_wifi_apply_credentials(const char *ssid, const char *password)
+{
+    esp_err_t err = progre_settings_set_wifi(ssid, password);
+    if (err != ESP_OK) return err;
+    wifi_config_t cfg = {0};
+    strlcpy((char *)cfg.sta.ssid, ssid, sizeof(cfg.sta.ssid));
+    strlcpy((char *)cfg.sta.password, password, sizeof(cfg.sta.password));
+    cfg.sta.threshold.authmode = WIFI_AUTH_WPA2_PSK;
+    err = esp_wifi_set_config(WIFI_IF_STA, &cfg);
+    if (err != ESP_OK) return err;
+    esp_wifi_disconnect();
+    return esp_wifi_connect();
+}
+
+esp_err_t progre_wifi_reconnect(void)
+{
+    esp_wifi_disconnect();
+    return esp_wifi_connect();
 }

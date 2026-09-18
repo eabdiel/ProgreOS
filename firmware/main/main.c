@@ -11,6 +11,7 @@
 #include "progre_wifi.h"
 #include "progre_bridge.h"
 #include "progre_display.h"
+#include "progre_usb.h"
 
 static const char *TAG = "PROGRE";
 
@@ -77,6 +78,7 @@ void app_main(void)
             ESP_LOGI(TAG, "Microphone initialization PASS.");
 
     esp_err_t wifi_err = progre_wifi_init();
+    ESP_ERROR_CHECK(progre_usb_control_init());
     progre_bridge_init();
     if (wifi_err == ESP_OK) {
         ESP_LOGI(TAG, "Wi-Fi manager started.");

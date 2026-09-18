@@ -9,6 +9,7 @@
 #include "freertos/task.h"
 
 #include "progre_wifi.h"
+#include "progre_settings.h"
 #include "sdkconfig.h"
 
 #include "progre_audio.h"
@@ -73,8 +74,8 @@ static void bridge_task(void *arg)
         url,
         sizeof(url),
         "http://%s:%d/api/v1/device/hello",
-        CONFIG_PROGRE_BRIDGE_HOST,
-        CONFIG_PROGRE_BRIDGE_PORT
+        progre_settings_bridge_host(),
+        progre_settings_bridge_port()
     );
 
     const char *payload =
@@ -128,8 +129,8 @@ static void bridge_task(void *arg)
     ESP_LOGI(
         TAG,
         "HELLO -> %s:%d",
-        CONFIG_PROGRE_BRIDGE_HOST,
-        CONFIG_PROGRE_BRIDGE_PORT
+        progre_settings_bridge_host(),
+        progre_settings_bridge_port()
     );
 
     esp_err_t err =
@@ -268,8 +269,8 @@ esp_err_t progre_bridge_exchange_audio(
         url,
         sizeof(url),
         "http://%s:%d/api/v1/audio",
-        CONFIG_PROGRE_BRIDGE_HOST,
-        CONFIG_PROGRE_BRIDGE_PORT
+        progre_settings_bridge_host(),
+        progre_settings_bridge_port()
     );
 
     bridge_audio_response_t response = {
@@ -555,8 +556,8 @@ esp_err_t progre_bridge_exchange_audio_stream(
         url,
         sizeof(url),
         "http://%s:%d/api/v1/audio",
-        CONFIG_PROGRE_BRIDGE_HOST,
-        CONFIG_PROGRE_BRIDGE_PORT
+        progre_settings_bridge_host(),
+        progre_settings_bridge_port()
     );
 
     if (url_len <= 0 ||
