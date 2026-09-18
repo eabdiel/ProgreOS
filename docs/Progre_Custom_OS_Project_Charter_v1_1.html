@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Progre Custom OS Project Charter v1.1</title>
+<style>
+body {
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    max-width: 900px;
+    margin: 40px auto;
+    padding: 0 24px 60px;
+    line-height: 1.6;
+    color: #111;
+    background: #fff;
+}
+h1, h2 { line-height: 1.2; }
+code {
+    background: #f2f2f2;
+    padding: 2px 5px;
+    border-radius: 4px;
+}
+.status {
+    border-left: 4px solid #111;
+    padding-left: 16px;
+}
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 18px 0;
+}
+th, td {
+    text-align: left;
+    padding: 8px;
+    border-bottom: 1px solid #ddd;
+}
+small { color: #555; }
+</style>
+</head>
+<body>
+
+<h1>Progre Custom OS Project Charter</h1>
+<p><strong>Version 1.1</strong> — September 2026</p>
+
+<h2>1. Purpose</h2>
+<p>
+Progre is a ProgreTech physical AI companion built on the AIPI Lite hardware platform.
+The project replaces the stock experience with a purpose-built Progre OS firmware that
+turns the device into a lightweight physical endpoint for voice interaction, expressive
+display behavior, Japanese-language assistance, and connection to ProgreTech services.
+</p>
+
+<h2>2. Architectural Principle</h2>
+<p>
+Progre is intentionally a <strong>thin endpoint</strong>. The ESP32-S3 is responsible for
+device hardware, interaction state, audio transport, display behavior, Wi-Fi connectivity,
+recovery, and the Progre protocol.
+</p>
+
+<p>
+Higher-level intelligence remains outside the device:
+</p>
+
+<pre>
+AIPI Lite / Progre OS
+        |
+        | Progre Protocol over LAN
+        v
+Local Progre Voice Bridge
+        |
+        +-- STT / TTS
+        +-- Session and personality
+        +-- Japanese learning
+        +-- Long-term memory
+        +-- Local models
+        +-- Autonomous OS
+        +-- ProgreTech Mesh
+</pre>
+
+<p>
+Progre must consume the wider ProgreTech architecture through adapters and bridges.
+The Progre project must not require redesigning Rend, Autonomous OS, or the ProgreTech Mesh.
+</p>
+
+<h2>3. Hardware Baseline</h2>
+<table>
+<tr><th>Component</th><th>Verified Configuration</th></tr>
+<tr><td>MCU</td><td>ESP32-S3 revision v0.2</td></tr>
+<tr><td>PSRAM</td><td>8 MB</td></tr>
+<tr><td>Flash</td><td>16 MB</td></tr>
+<tr><td>Display</td><td>128×128 ST7735-compatible LCD</td></tr>
+<tr><td>Audio Codec</td><td>ES8311 at I2C address 0x18</td></tr>
+<tr><td>Talk Button</td><td>GPIO42, active-low</td></tr>
+<tr><td>Speaker Amplifier Enable</td><td>GPIO9</td></tr>
+<tr><td>USB</td><td>Native ESP32-S3 USB Serial/JTAG</td></tr>
+</table>
+
+<h2>4. Recovery and Safety Baseline</h2>
+<p>
+The original 16 MB factory firmware was captured twice and verified byte-for-byte before
+the first firmware write.
+</p>
+
+<p>
+Factory backup SHA-256:
+<code>cffb5c062b12b8e30490473b07bcdc97fc4ee46f6408eb2d28888c4747f17c02</code>
+</p>
+
+<p>
+Project rules:
+</p>
+
+<ul>
+<li>Never burn or modify eFuses as part of ordinary development.</li>
+<li>Prefer app-only firmware writes at <code>0x10000</code>.</li>
+<li>Preserve the original recovery image independently of development builds.</li>
+<li>Use hash-verified release artifacts for controlled device updates.</li>
+</ul>
+
+<h2>5. Proven Hardware Mapping</h2>
+
+<table>
+<tr><th>Function</th><th>GPIO</th></tr>
+<tr><td>LCD Backlight</td><td>3</td></tr>
+<tr><td>LCD D/C</td><td>7</td></tr>
+<tr><td>LCD CS</td><td>15</td></tr>
+<tr><td>LCD SCLK</td><td>16</td></tr>
+<tr><td>LCD MOSI</td><td>17</td></tr>
+<tr><td>LCD Reset</td><td>18</td></tr>
+<tr><td>ES8311 I2C SCL</td><td>4</td></tr>
+<tr><td>ES8311 I2C SDA</td><td>5</td></tr>
+<tr><td>I2S MCLK</td><td>6</td></tr>
+<tr><td>Speaker Amp Enable</td><td>9</td></tr>
+<tr><td>I2S Speaker DOUT</td><td>11</td></tr>
+<tr><td>I2S LRCLK</td><td>12</td></tr>
+<tr><td>I2S Microphone DIN</td><td>13</td></tr>
+<tr><td>I2S BCLK</td><td>14</td></tr>
+<tr><td>Talk Button</td><td>42</td></tr>
+</table>
+
+<p>
+GPIO10 is treated as board-power control and remains untouched unless separately
+validated in future hardware work.
+</p>
+
+<h2>6. Audio Architecture</h2>
+<p>
+Physical testing established that the ESP32-S3 I2S interface must operate as a paired
+full-duplex transport with both TX and RX continuously running.
+</p>
+
+<p>
+Speaker audibility is controlled independently:
+</p>
+
+<ul>
+<li>ES8311 DAC mute state</li>
+<li>GPIO9 speaker amplifier enable</li>
+</ul>
+
+<p>
+The I2S TX half must not be stopped merely to silence the speaker because doing so can
+interrupt the shared clock domain and prevent microphone capture.
+</p>
+
+<h2>7. Release Milestones</h2>
+
+<table>
+<tr><th>Release</th><th>Milestone</th><th>Status</th></tr>
+<tr><td>v0.1</td><td>First Light — display and initial Progre face</td><td>Complete</td></tr>
+<tr><td>v0.2</td><td>Face refinement and blink behavior</td><td>Complete</td></tr>
+<tr><td>v0.3</td><td>Body — Talk button and listening interaction</td><td>Complete</td></tr>
+<tr><td>v0.4</td><td>Voice — ES8311 microphone and speaker</td><td>Complete</td></tr>
+<tr><td>v0.5</td><td>Connected — Wi-Fi and local Progre Bridge protocol</td><td>Next</td></tr>
+<tr><td>v0.6</td><td>Alive — STT/TTS and synchronized expressions</td><td>Planned</td></tr>
+<tr><td>v1.0</td><td>Progre — personality, memory, Japanese companion, AOS/Mesh integration</td><td>Planned</td></tr>
+</table>
+
+<h2>8. Current Release</h2>
+
+<div class="status">
+<p><strong>Progre OS v0.4 Voice</strong></p>
+<p>Git tag: <code>progre-os-v0.4-voice</code></p>
+<p>Git commit: <code>f7ce820</code></p>
+<p>
+Release firmware SHA-256:
+<code>f92fb4675acb918e346cde27d5a2112e6c08653bf1a08a5ff5e4e54b535b7946</code>
+</p>
+<p>
+Verified behavior: microphone capture, speaker playback, microphone-after-speaker
+coexistence, Talk-button interaction, display behavior, and silent release boot.
+</p>
+</div>
+
+<h2>9. Immediate Target — Phase 1F Connected</h2>
+<p>
+The next milestone connects Progre to a local Progre Voice Bridge over Wi-Fi.
+The first usable end-to-end path is:
+</p>
+
+<pre>
+Talk
+  -> capture speech
+  -> send to local bridge
+  -> receive response
+  -> speak response
+  -> update Progre face/state
+</pre>
+
+<p>
+Initial Phase 1F work should remain local-network-first and avoid unnecessary cloud
+dependencies.
+</p>
+
+<h2>10. Future Operator Experience</h2>
+<p>
+The command line remains the developer and recovery interface. Once Progre is stable,
+a separate Progre Cockpit may provide firmware updates, device discovery, Wi-Fi and bridge
+configuration, recovery, logs, audio tests, display controls, personality configuration,
+Japanese settings, and Autonomous OS / Mesh connection status.
+</p>
+
+<p>
+The Cockpit must sit above the low-level tooling rather than replace it.
+</p>
+
+<hr>
+<small>
+Authoritative project checkpoint for the Progre Custom OS effort.
+</small>
+
+</body>
+</html>
