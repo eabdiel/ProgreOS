@@ -1,0 +1,297 @@
+{
+  "schema": 1,
+  "device": null,
+  "detection": {
+    "state": "progre_detected",
+    "port": "/dev/ttyACM0",
+    "hardware": "AIPI Lite / ESP32-S3 compatible",
+    "firmware": "Progre OS",
+    "firmware_version": "0.6-conversation",
+    "message": "Progre OS detected. Device is ready for commissioning.",
+    "status": {
+      "cmd": "status",
+      "ok": true,
+      "device": "progre",
+      "firmware": "Progre OS",
+      "version": "0.6-conversation",
+      "wifi_state": "CONNECTING",
+      "ssid": "ERHOME",
+      "bridge_host": "192.168.1.39",
+      "bridge_port": 8765
+    },
+    "candidates": [
+      {
+        "port": "/dev/ttyS31",
+        "vid": null,
+        "pid": null,
+        "description": "n/a",
+        "manufacturer": null,
+        "espressif": false
+      },
+      {
+        "port": "/dev/ttyS30",
+        "vid": null,
+        "pid": null,
+        "description": "n/a",
+        "manufacturer": null,
+        "espressif": false
+      },
+      {
+        "port": "/dev/ttyS29",
+        "vid": null,
+        "pid": null,
+        "description": "n/a",
+        "manufacturer": null,
+        "espressif": false
+      },
+      {
+        "port": "/dev/ttyS28",
+        "vid": null,
+        "pid": null,
+        "description": "n/a",
+        "manufacturer": null,
+        "espressif": false
+      },
+      {
+        "port": "/dev/ttyS27",
+        "vid": null,
+        "pid": null,
+        "description": "n/a",
+        "manufacturer": null,
+        "espressif": false
+      },
+      {
+        "port": "/dev/ttyS26",
+        "vid": null,
+        "pid": null,
+        "description": "n/a",
+        "manufacturer": null,
+        "espressif": false
+      },
+      {
+        "port": "/dev/ttyS25",
+        "vid": null,
+        "pid": null,
+        "description": "n/a",
+        "manufacturer": null,
+        "espressif": false
+      },
+      {
+        "port": "/dev/ttyS24",
+        "vid": null,
+        "pid": null,
+        "description": "n/a",
+        "manufacturer": null,
+        "espressif": false
+      },
+      {
+        "port": "/dev/ttyS23",
+        "vid": null,
+        "pid": null,
+        "description": "n/a",
+        "manufacturer": null,
+        "espressif": false
+      },
+      {
+        "port": "/dev/ttyS22",
+        "vid": null,
+        "pid": null,
+        "description": "n/a",
+        "manufacturer": null,
+        "espressif": false
+      },
+      {
+        "port": "/dev/ttyS21",
+        "vid": null,
+        "pid": null,
+        "description": "n/a",
+        "manufacturer": null,
+        "espressif": false
+      },
+      {
+        "port": "/dev/ttyS20",
+        "vid": null,
+        "pid": null,
+        "description": "n/a",
+        "manufacturer": null,
+        "espressif": false
+      },
+      {
+        "port": "/dev/ttyS19",
+        "vid": null,
+        "pid": null,
+        "description": "n/a",
+        "manufacturer": null,
+        "espressif": false
+      },
+      {
+        "port": "/dev/ttyS18",
+        "vid": null,
+        "pid": null,
+        "description": "n/a",
+        "manufacturer": null,
+        "espressif": false
+      },
+      {
+        "port": "/dev/ttyS17",
+        "vid": null,
+        "pid": null,
+        "description": "n/a",
+        "manufacturer": null,
+        "espressif": false
+      },
+      {
+        "port": "/dev/ttyS16",
+        "vid": null,
+        "pid": null,
+        "description": "n/a",
+        "manufacturer": null,
+        "espressif": false
+      },
+      {
+        "port": "/dev/ttyS15",
+        "vid": null,
+        "pid": null,
+        "description": "n/a",
+        "manufacturer": null,
+        "espressif": false
+      },
+      {
+        "port": "/dev/ttyS14",
+        "vid": null,
+        "pid": null,
+        "description": "n/a",
+        "manufacturer": null,
+        "espressif": false
+      },
+      {
+        "port": "/dev/ttyS13",
+        "vid": null,
+        "pid": null,
+        "description": "n/a",
+        "manufacturer": null,
+        "espressif": false
+      },
+      {
+        "port": "/dev/ttyS12",
+        "vid": null,
+        "pid": null,
+        "description": "n/a",
+        "manufacturer": null,
+        "espressif": false
+      },
+      {
+        "port": "/dev/ttyS11",
+        "vid": null,
+        "pid": null,
+        "description": "n/a",
+        "manufacturer": null,
+        "espressif": false
+      },
+      {
+        "port": "/dev/ttyS10",
+        "vid": null,
+        "pid": null,
+        "description": "n/a",
+        "manufacturer": null,
+        "espressif": false
+      },
+      {
+        "port": "/dev/ttyS9",
+        "vid": null,
+        "pid": null,
+        "description": "n/a",
+        "manufacturer": null,
+        "espressif": false
+      },
+      {
+        "port": "/dev/ttyS8",
+        "vid": null,
+        "pid": null,
+        "description": "n/a",
+        "manufacturer": null,
+        "espressif": false
+      },
+      {
+        "port": "/dev/ttyS7",
+        "vid": null,
+        "pid": null,
+        "description": "n/a",
+        "manufacturer": null,
+        "espressif": false
+      },
+      {
+        "port": "/dev/ttyS6",
+        "vid": null,
+        "pid": null,
+        "description": "n/a",
+        "manufacturer": null,
+        "espressif": false
+      },
+      {
+        "port": "/dev/ttyS5",
+        "vid": null,
+        "pid": null,
+        "description": "n/a",
+        "manufacturer": null,
+        "espressif": false
+      },
+      {
+        "port": "/dev/ttyS4",
+        "vid": null,
+        "pid": null,
+        "description": "n/a",
+        "manufacturer": null,
+        "espressif": false
+      },
+      {
+        "port": "/dev/ttyS3",
+        "vid": null,
+        "pid": null,
+        "description": "n/a",
+        "manufacturer": null,
+        "espressif": false
+      },
+      {
+        "port": "/dev/ttyS2",
+        "vid": null,
+        "pid": null,
+        "description": "n/a",
+        "manufacturer": null,
+        "espressif": false
+      },
+      {
+        "port": "/dev/ttyS1",
+        "vid": null,
+        "pid": null,
+        "description": "n/a",
+        "manufacturer": null,
+        "espressif": false
+      },
+      {
+        "port": "/dev/ttyS0",
+        "vid": null,
+        "pid": null,
+        "description": "n/a",
+        "manufacturer": null,
+        "espressif": false
+      },
+      {
+        "port": "/dev/ttyACM0",
+        "vid": 12346,
+        "pid": 4097,
+        "description": "USB JTAG/serial debug unit",
+        "manufacturer": "Espressif",
+        "espressif": true
+      }
+    ]
+  },
+  "recovery": {
+    "stock_backup": null,
+    "backup_verified": false
+  },
+  "provisioning": {
+    "progre_installed": false,
+    "last_provisioned": null
+  }
+}
