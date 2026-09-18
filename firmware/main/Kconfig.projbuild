@@ -1,0 +1,11 @@
+menu "Progre OS"
+
+config PROGRE_WIFI_SSID
+    string "Commissioning Wi-Fi SSID"
+    default ""
+
+config PROGRE_WIFI_PASSWORD
+    string "Commissioning Wi-Fi password"
+    default ""
+
+endmenu

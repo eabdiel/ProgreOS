@@ -22,3 +22,5 @@ recovery/*
 .env
 secrets.*
 wifi.*
+firmware/sdkconfig
+firmware/sdkconfig.old

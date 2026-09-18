@@ -8,6 +8,7 @@
 
 #include "board_aipi_lite.h"
 #include "progre_audio.h"
+#include "progre_wifi.h"
 #include "progre_display.h"
 
 static const char *TAG = "PROGRE";
@@ -39,8 +40,8 @@ static bool talk_button_raw_pressed(void)
 void app_main(void)
 {
     ESP_LOGI(TAG, "================================");
-    ESP_LOGI(TAG, "        PROGRE OS v0.4");
-    ESP_LOGI(TAG, "             VOICE");
+    ESP_LOGI(TAG, "        PROGRE OS v0.5");
+    ESP_LOGI(TAG, "           CONNECTED");
     ESP_LOGI(TAG, "================================");
 
     ESP_ERROR_CHECK(progre_display_init());
@@ -61,6 +62,14 @@ void app_main(void)
         if (microphone_init == ESP_OK) {
             microphone_ready = true;
             ESP_LOGI(TAG, "Microphone initialization PASS.");
+
+    esp_err_t wifi_err = progre_wifi_init();
+    if (wifi_err == ESP_OK) {
+        ESP_LOGI(TAG, "Wi-Fi manager started.");
+    } else {
+        ESP_LOGE(TAG, "Wi-Fi initialization failed: %s",
+                 esp_err_to_name(wifi_err));
+    }
 
         } else {
             ESP_LOGW(TAG, "Microphone initialization unavailable: %s",
