@@ -15,7 +15,7 @@ class _Session:
         self.ser = None
         self.lock = threading.RLock()
 
-    def _open(self):
+    def _open(self, recovery=False):
         import serial
 
         if self.ser is not None and self.ser.is_open:
@@ -35,9 +35,9 @@ class _Session:
         ser.open()
         self.ser = ser
 
-        # Opening ESP32-S3 native USB may reset the board. Do that at most once
-        # per Cockpit session, then give Progre time to boot before the first command.
-        time.sleep(1.35)
+        # Opening ESP32-S3 native USB may reset the board. A recovery reopen
+        # therefore needs a longer boot allowance than the initial session open.
+        time.sleep(3.0 if recovery else 1.35)
         ser.reset_input_buffer()
         return ser
 
@@ -50,12 +50,12 @@ class _Session:
                 finally:
                     self.ser = None
 
-    def command(self, cmd, timeout=8.0, **payload):
+    def command(self, cmd, timeout=8.0, recovery=False, **payload):
         request = {"cmd": cmd, **payload}
         wire = ("PROGRE " + json.dumps(request, separators=(",", ":")) + "\n").encode()
 
         with self.lock:
-            ser = self._open()
+            ser = self._open(recovery=recovery)
             ser.reset_input_buffer()
             ser.write(wire)
             ser.flush()
@@ -116,7 +116,12 @@ def command(serial_port, cmd, timeout=8.0, **payload):
         session.close()
 
         try:
-            return session.command(cmd, timeout=timeout, **payload)
+            return session.command(
+                cmd,
+                timeout=max(timeout, 8.0),
+                recovery=True,
+                **payload,
+            )
         except Exception:
             session.close()
             raise

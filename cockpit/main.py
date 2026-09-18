@@ -90,13 +90,13 @@ def dependency_status():
     # Existing /api/status already discovers installed Ollama models.
     installed_models = models()
     cfg_model = load_config().get("model")
-    result.setdefault("ai_model", {
+    result["ai_model"] = {
         "label": "Local AI Model",
         "required": True,
         "installable": True,
         "ready": cfg_model in installed_models,
         "detected": cfg_model if cfg_model in installed_models else None,
-    })
+    }
 
     return result
 
@@ -337,14 +337,17 @@ def api_device_configure():
 
         final_status = None
 
-        for _ in range(8):
-            time.sleep(1.5)
+        # Wi-Fi association can legitimately take several seconds,
+        # especially after USB recovery or AP renegotiation. Keep polling
+        # authoritative device status for a bounded ~36 second window.
+        for _ in range(12):
+            time.sleep(2.0)
 
             try:
                 status_reply = device_command(
                     port,
                     "status",
-                    timeout=4,
+                    timeout=6,
                 )
             except Exception:
                 continue
@@ -1136,6 +1139,7 @@ async function detectAipi() {
 
   state.textContent = "Scanning...";
   detail.textContent = "Checking attached USB hardware.";
+  actionProgressStart("Detecting AIPI / Progre hardware…");
 
   try {
     const response = await fetch("/api/device/detect", {
@@ -1144,11 +1148,29 @@ async function detectAipi() {
 
     const data = await response.json();
 
+    if (!response.ok) {
+      throw new Error(
+        data.message || data.error || `HTTP ${response.status}`
+      );
+    }
+
     await loadDevice();
+
+    const detected = data.device?.detection || data.detection || {};
+    const detectedState = detected.state || "device detected";
+
+    actionProgressFinish(
+      detectedState === "progre_detected"
+        ? "Progre detected"
+        : "Device detection complete"
+    );
 
   } catch (error) {
     state.textContent = "Detection failed";
     detail.textContent = String(error);
+    actionProgressFail(
+      `Device detection failed: ${error.message || error}`
+    );
   }
 }
 
@@ -1206,16 +1228,60 @@ async function loadHostNetwork() {
   try { const d=await (await fetch("/api/host/network")).json(); if(d.ok){ document.getElementById("bridge-host").value=d.bridge_host; document.getElementById("bridge-port").value=d.bridge_port; } } catch(e) {}
 }
 async function scanWifi() {
-  const msg=document.getElementById("commission-message"), sel=document.getElementById("wifi-ssid"); msg.textContent="Scanning from Progre…";
-  try { const r=await fetch("/api/device/wifi/scan",{method:"POST"}), d=await r.json(); if(!r.ok||!d.ok) throw new Error(d.message||d.error||"scan failed");
-    const seen=new Set(), nets=(d.networks||[]).filter(n=>n.ssid&&!seen.has(n.ssid)&&seen.add(n.ssid)).sort((a,b)=>b.rssi-a.rssi);
-    sel.innerHTML=nets.map(n=>`<option value="${esc(n.ssid)}">${esc(n.ssid)} (${n.rssi} dBm)</option>`).join(""); msg.textContent=`Found ${nets.length} network(s).`;
-  } catch(e) { msg.textContent="Wi-Fi scan failed: "+e; }
+  const msg = document.getElementById("commission-message");
+  const sel = document.getElementById("wifi-ssid");
+
+  msg.textContent = "Scanning from Progre…";
+  actionProgressStart("Scanning Wi-Fi from Progre…");
+
+  try {
+    const response = await fetch("/api/device/wifi/scan", {
+      method: "POST"
+    });
+
+    const data = await response.json();
+
+    if (!response.ok || !data.ok) {
+      throw new Error(
+        data.message || data.error || "Wi-Fi scan failed"
+      );
+    }
+
+    const seen = new Set();
+
+    const nets = (data.networks || [])
+      .filter(n =>
+        n.ssid &&
+        !seen.has(n.ssid) &&
+        seen.add(n.ssid)
+      )
+      .sort((a, b) => b.rssi - a.rssi);
+
+    sel.innerHTML = nets.map(n =>
+      `<option value="${esc(n.ssid)}">` +
+      `${esc(n.ssid)} (${n.rssi} dBm)</option>`
+    ).join("");
+
+    msg.textContent = `Found ${nets.length} network(s).`;
+
+    actionProgressFinish(
+      `Wi-Fi scan complete — ${nets.length} network(s)`
+    );
+
+  } catch (error) {
+    msg.textContent =
+      "Wi-Fi scan failed: " + (error.message || error);
+
+    actionProgressFail(
+      `Wi-Fi scan failed: ${error.message || error}`
+    );
+  }
 }
 async function configureProgre() {
   const msg = document.getElementById("commission-message");
   const passwordField = document.getElementById("wifi-password");
-  const button = document.querySelector('button[onclick="configureProgre()"]');
+  const button =
+    document.querySelector('button[onclick="configureProgre()"]');
 
   const body = {
     ssid: document.getElementById("wifi-ssid").value,
@@ -1226,10 +1292,11 @@ async function configureProgre() {
 
   if (!body.ssid) {
     msg.textContent = "Select a Wi-Fi network first.";
+    actionProgressFail("Select a Wi-Fi network first");
     return;
   }
 
-  // The browser does not retain the password after the request is prepared.
+  // Cockpit does not retain the Wi-Fi password after preparing the request.
   passwordField.value = "";
 
   if (button) {
@@ -1240,6 +1307,10 @@ async function configureProgre() {
   msg.textContent =
     `Saving ${body.ssid} credentials and Bridge settings. ` +
     "Waiting for Progre to actually join the network…";
+
+  actionProgressStart(
+    `Connecting Progre to ${body.ssid}…`
+  );
 
   try {
     const response = await fetch("/api/device/configure", {
@@ -1260,6 +1331,13 @@ async function configureProgre() {
         `Bridge ${data.bridge_host}:${data.bridge_port}. ${bridgeState}`;
 
       await loadDevice();
+
+      actionProgressFinish(
+        data.bridge_online
+          ? `Progre ready on ${data.ssid}`
+          : `Progre connected to ${data.ssid}`
+      );
+
       return;
     }
 
@@ -1273,15 +1351,29 @@ async function configureProgre() {
         (data.message || "Use Reconnect to try again.");
 
       await loadDevice();
+
+      actionProgressFail(
+        `Credentials saved — Progre is ${state}`
+      );
+
       return;
     }
 
-    msg.textContent =
-      "Configuration failed: " +
-      (data.message || data.error || `HTTP ${response.status}`);
+    throw new Error(
+      data.message ||
+      data.error ||
+      `Configuration failed (HTTP ${response.status})`
+    );
 
   } catch (error) {
-    msg.textContent = "Configuration request failed: " + error;
+    msg.textContent =
+      "Configuration request failed: " +
+      (error.message || error);
+
+    actionProgressFail(
+      `Connection failed: ${error.message || error}`
+    );
+
   } finally {
     if (button) {
       button.disabled = false;
@@ -1289,8 +1381,68 @@ async function configureProgre() {
     }
   }
 }
-async function reconnectProgre(){ const msg=document.getElementById("commission-message"); try{const r=await fetch("/api/device/reconnect",{method:"POST"}),d=await r.json(); msg.textContent=d.ok?"Reconnect requested.":(d.message||d.error);}catch(e){msg.textContent=String(e)}}
-async function rebootProgre(){ if(!confirm("Reboot Progre now?"))return; const msg=document.getElementById("commission-message"); try{await fetch("/api/device/reboot",{method:"POST"});msg.textContent="Reboot requested. USB may disappear briefly."}catch(e){msg.textContent=String(e)}}
+async function reconnectProgre() {
+  const msg = document.getElementById("commission-message");
+
+  actionProgressStart("Requesting Progre Wi-Fi reconnect…");
+
+  try {
+    const response = await fetch("/api/device/reconnect", {
+      method: "POST"
+    });
+
+    const data = await response.json();
+
+    if (!response.ok || !data.ok) {
+      throw new Error(
+        data.message || data.error || "Reconnect failed"
+      );
+    }
+
+    msg.textContent = "Reconnect requested.";
+    actionProgressFinish("Progre reconnect requested");
+
+  } catch (error) {
+    msg.textContent = String(error);
+    actionProgressFail(
+      `Reconnect failed: ${error.message || error}`
+    );
+  }
+}
+async function rebootProgre() {
+  if (!confirm("Reboot Progre now?")) return;
+
+  const msg = document.getElementById("commission-message");
+
+  actionProgressStart("Rebooting Progre…");
+
+  try {
+    const response = await fetch("/api/device/reboot", {
+      method: "POST"
+    });
+
+    const data = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      throw new Error(
+        data.message || data.error || `HTTP ${response.status}`
+      );
+    }
+
+    msg.textContent =
+      "Reboot requested. USB may disappear briefly.";
+
+    actionProgressFinish("Progre reboot requested");
+
+  } catch (error) {
+    msg.textContent =
+      "Reboot failed: " + (error.message || error);
+
+    actionProgressFail(
+      `Reboot failed: ${error.message || error}`
+    );
+  }
+}
 
 async function refreshPortability() {
   await Promise.all([

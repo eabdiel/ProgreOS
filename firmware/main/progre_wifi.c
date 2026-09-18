@@ -163,27 +163,33 @@ esp_err_t progre_wifi_init(void)
 }
 
 
-esp_err_t progre_wifi_scan(progre_wifi_network_t *networks, size_t max_networks, size_t *count)
+esp_err_t progre_wifi_scan(
+    progre_wifi_network_t *networks,
+    size_t max_networks,
+    size_t *count
+)
 {
-    if (!networks || !count || max_networks == 0) return ESP_ERR_INVALID_ARG;
+    if (!networks || !count || max_networks == 0) {
+        return ESP_ERR_INVALID_ARG;
+    }
 
     *count = 0;
     s_commissioning_scan = true;
 
-    esp_err_t disconnect_err = esp_wifi_disconnect();
-    if (disconnect_err != ESP_OK &&
-        disconnect_err != ESP_ERR_WIFI_NOT_CONNECT) {
-        s_commissioning_scan = false;
-        return disconnect_err;
-    }
-
-    vTaskDelay(pdMS_TO_TICKS(250));
-
+    /*
+     * Commissioning scans must not tear down an existing station
+     * connection. ESP-IDF supports scanning while STA is connected.
+     * Keeping the association alive also preserves the Voice Bridge
+     * while Cockpit discovers nearby networks.
+     */
     wifi_scan_config_t cfg = {0};
+
     esp_err_t err = esp_wifi_scan_start(&cfg, true);
 
     if (err == ESP_OK) {
-        uint16_t n = (uint16_t)(max_networks > 32 ? 32 : max_networks);
+        uint16_t n =
+            (uint16_t)(max_networks > 32 ? 32 : max_networks);
+
         wifi_ap_record_t records[32];
 
         err = esp_wifi_scan_get_ap_records(&n, records);
@@ -195,28 +201,17 @@ esp_err_t progre_wifi_scan(progre_wifi_network_t *networks, size_t max_networks,
                     (const char *)records[i].ssid,
                     sizeof(networks[i].ssid)
                 );
+
                 networks[i].rssi = records[i].rssi;
             }
+
             *count = n;
         }
     }
 
     s_commissioning_scan = false;
 
-    s_retry_count = 0;
-    set_state(PROGRE_WIFI_CONNECTING);
-
-    esp_err_t reconnect_err = esp_wifi_connect();
-
-    if (err != ESP_OK) return err;
-
-    if (reconnect_err != ESP_OK &&
-        reconnect_err != ESP_ERR_WIFI_CONN) {
-        ESP_LOGW(TAG, "Post-scan reconnect returned: %s",
-                 esp_err_to_name(reconnect_err));
-    }
-
-    return ESP_OK;
+    return err;
 }
 
 esp_err_t progre_wifi_apply_credentials(const char *ssid, const char *password)
