@@ -24,3 +24,4 @@ secrets.*
 wifi.*
 firmware/sdkconfig
 firmware/sdkconfig.old
+bridge/progre_config.local.json

@@ -850,3 +850,148 @@ cleanup:
 
     return result;
 }
+
+
+esp_err_t progre_audio_stream_begin(void)
+{
+    if (s_tx == NULL) {
+        ESP_LOGE(TAG, "Streaming playback unavailable: TX not initialized");
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    /*
+     * Duplex invariant:
+     * TX/RX remain RUNNING at all times.
+     *
+     * Playback is controlled only through codec mute and amplifier gate.
+     */
+    ESP_RETURN_ON_ERROR(
+        codec_write_checked(0x31, 0x00),
+        TAG,
+        "Unable to unmute DAC for streaming"
+    );
+
+    gpio_set_level(PROGRE_AUDIO_SPK_EN_PIN, 1);
+
+    ESP_LOGI(TAG, "PCM streaming playback started");
+    return ESP_OK;
+}
+
+
+esp_err_t progre_audio_stream_write(
+    const int16_t *samples,
+    size_t frame_count
+)
+{
+    if (samples == NULL || frame_count == 0) {
+        return ESP_OK;
+    }
+
+    if (s_tx == NULL) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    /*
+     * Network audio is mono.
+     * ES8311/I2S transport remains stereo, so duplicate each mono
+     * frame into L/R without buffering the whole response.
+     */
+    enum {
+        STREAM_CHUNK_FRAMES = 256
+    };
+
+    int16_t stereo[STREAM_CHUNK_FRAMES * 2];
+
+    size_t offset = 0;
+
+    while (offset < frame_count) {
+        size_t remaining = frame_count - offset;
+        size_t chunk = remaining;
+
+        if (chunk > STREAM_CHUNK_FRAMES) {
+            chunk = STREAM_CHUNK_FRAMES;
+        }
+
+        for (size_t i = 0; i < chunk; ++i) {
+            int16_t sample = samples[offset + i];
+            stereo[i * 2] = sample;
+            stereo[i * 2 + 1] = sample;
+        }
+
+        size_t bytes_written = 0;
+
+        esp_err_t err = i2s_channel_write(
+            s_tx,
+            stereo,
+            chunk * 2 * sizeof(int16_t),
+            &bytes_written,
+            500
+        );
+
+        if (err != ESP_OK) {
+            ESP_LOGE(
+                TAG,
+                "Streaming I2S write failed: %s",
+                esp_err_to_name(err)
+            );
+            return err;
+        }
+
+        if (bytes_written != chunk * 2 * sizeof(int16_t)) {
+            ESP_LOGE(
+                TAG,
+                "Streaming I2S short write: %u/%u bytes",
+                (unsigned)bytes_written,
+                (unsigned)(chunk * 2 * sizeof(int16_t))
+            );
+            return ESP_FAIL;
+        }
+
+        offset += chunk;
+    }
+
+    return ESP_OK;
+}
+
+
+esp_err_t progre_audio_stream_end(void)
+{
+    if (s_tx == NULL) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    /*
+     * Push a small silence tail before muting to avoid clipping the
+     * final phoneme and to leave the codec in a quiet state.
+     */
+    int16_t silence[160 * 2] = {0};
+    size_t bytes_written = 0;
+
+    esp_err_t err = i2s_channel_write(
+        s_tx,
+        silence,
+        sizeof(silence),
+        &bytes_written,
+        500
+    );
+
+    gpio_set_level(PROGRE_AUDIO_SPK_EN_PIN, 0);
+
+    esp_err_t mute_err =
+        codec_write_checked(0x31, 0x60);
+
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    if (mute_err != ESP_OK) {
+        return mute_err;
+    }
+
+    ESP_LOGI(
+        TAG,
+        "PCM streaming playback complete; duplex I2S remains RUNNING"
+    );
+
+    return ESP_OK;
+}

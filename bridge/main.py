@@ -1,4 +1,8 @@
 from __future__ import annotations
+import subprocess
+import tempfile
+import wave
+from pathlib import Path
 
 import socket
 import struct
@@ -6,11 +10,39 @@ from datetime import datetime, timezone
 
 from flask import Flask, Response, jsonify, request
 
+from progre_config import load_config
+
 
 APP_NAME = "progre-voice-bridge"
 PROTOCOL_VERSION = 1
 
 app = Flask(__name__)
+
+
+PROGRE_WHISPER = '/home/edwin/Rend/experiments/whisper-cpp/build/bin/whisper-cli'
+PROGRE_WHISPER_MODEL = '/home/edwin/Rend/experiments/whisper-cpp/models/ggml-base.en.bin'
+PROGRE_PIPER = '/home/edwin/Rend/experiments/autonomous-voice/runtime/piper/piper/piper'
+PROGRE_PIPER_MODEL = '/home/edwin/Rend/experiments/autonomous-voice/runtime/piper/voices/en_US-arctic-medium.onnx'
+PROGRE_OLLAMA_URL = "http://127.0.0.1:11434/api/generate"
+PROGRE_OLLAMA_MODEL = "qwen3.5:2b"
+
+PROGRE_SYSTEM_PROMPT = """
+You are Progre, a small physical desktop companion created as
+part of the ProgreTech project.
+
+You are speaking directly with Edwin.
+
+Be warm, curious, concise, and conversational.
+You may occasionally be playful.
+Keep ordinary spoken responses to one or two short sentences.
+
+You are also intended to become a Japanese-learning companion,
+but do not force Japanese into unrelated conversations.
+
+Never describe yourself as a generic AI assistant.
+Your name is Progre.
+""".strip()
+
 
 
 def utc_now() -> str:
@@ -77,96 +109,280 @@ def device_hello():
     )
 
 
+def _pcm_to_wav(pcm: bytes, path: str):
+    with wave.open(path, "wb") as wav:
+        wav.setnchannels(1)
+        wav.setsampwidth(2)
+        wav.setframerate(16000)
+        wav.writeframes(pcm)
+
+
+def _wav_to_pcm_16k_mono(wav_path):
+    cfg = load_config()
+
+    pitch_semitones = float(
+        cfg["pitch_semitones"]
+    )
+
+    volume = float(
+        cfg["volume"]
+    )
+
+    pitch_factor = 2.0 ** (
+        pitch_semitones / 12.0
+    )
+
+    tempo_factor = 1.0 / pitch_factor
+
+    with wave.open(str(wav_path), "rb") as source:
+        source_rate = source.getframerate()
+
+    filter_chain = (
+        f"asetrate={source_rate}*{pitch_factor:.8f},"
+        f"aresample=16000,"
+        f"atempo={tempo_factor:.8f},"
+        f"volume={volume:.4f}"
+    )
+
+    with tempfile.NamedTemporaryFile(
+        suffix=".raw",
+        delete=False,
+    ) as raw_file:
+        raw_path = Path(raw_file.name)
+
+    try:
+        process = subprocess.run(
+            [
+                "ffmpeg",
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-y",
+                "-i",
+                str(wav_path),
+                "-af",
+                filter_chain,
+                "-ac",
+                "1",
+                "-ar",
+                "16000",
+                "-f",
+                "s16le",
+                str(raw_path),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+
+        if process.returncode != 0:
+            raise RuntimeError(
+                "ffmpeg voice processing failed: "
+                + process.stderr.strip()
+            )
+
+        return raw_path.read_bytes()
+
+    finally:
+        raw_path.unlink(
+            missing_ok=True
+        )
+
+
+def _transcribe(pcm: bytes, workdir: str) -> str:
+    input_wav = str(Path(workdir) / "input.wav")
+    output_base = str(Path(workdir) / "whisper")
+
+    _pcm_to_wav(pcm, input_wav)
+
+    result = subprocess.run(
+        [
+            PROGRE_WHISPER,
+            "-m", PROGRE_WHISPER_MODEL,
+            "-f", input_wav,
+            "-otxt",
+            "-of", output_base,
+            "-nt",
+            "-np",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+
+    if result.returncode != 0:
+        raise RuntimeError(
+            "Whisper failed: " +
+            result.stderr[-1000:]
+        )
+
+    transcript_path = Path(output_base + ".txt")
+
+    if not transcript_path.exists():
+        raise RuntimeError(
+            "Whisper did not produce transcript"
+        )
+
+    return transcript_path.read_text().strip()
+
+
+def _ask_progre(transcript: str) -> str:
+    cfg = load_config()
+    import json
+    import urllib.request
+
+    payload = json.dumps(
+        {
+            "model": cfg["model"],
+            "system": PROGRE_SYSTEM_PROMPT,
+            "prompt": transcript,
+            "stream": False,
+            "think": False,
+            "keep_alive": "10m",
+            "options": {
+                "temperature": cfg["temperature"],
+                "num_predict": cfg["max_tokens"]
+            }
+        }
+    ).encode("utf-8")
+
+    req = urllib.request.Request(
+        PROGRE_OLLAMA_URL,
+        data=payload,
+        headers={
+            "Content-Type": "application/json"
+        },
+        method="POST",
+    )
+
+    with urllib.request.urlopen(
+        req,
+        timeout=90
+    ) as response:
+        data = json.loads(
+            response.read().decode("utf-8")
+        )
+
+    answer = data.get("response", "").strip()
+
+    if not answer:
+        raise RuntimeError(
+            "Ollama returned an empty response"
+        )
+
+    return answer
+
+
+def _synthesize(text: str, workdir: str) -> bytes:
+    cfg = load_config()
+    output_wav = str(Path(workdir) / "response.wav")
+
+    result = subprocess.run(
+        [
+            PROGRE_PIPER,
+            "--model", Path(PROGRE_PIPER_MODEL).with_name(cfg["voice"]),
+            "--output_file", output_wav,
+        ],
+        input=text + "\n",
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+
+    if result.returncode != 0:
+        raise RuntimeError(
+            "Piper failed: " +
+            result.stderr[-1000:]
+        )
+
+    if not Path(output_wav).exists():
+        raise RuntimeError(
+            "Piper did not produce response.wav"
+        )
+
+    return _wav_to_pcm_16k_mono(output_wav)
+
+
+
 @app.post("/api/v1/audio")
 def device_audio():
     """
-    Commissioning audio endpoint.
+    Progre conversational voice endpoint.
 
-    Input:
+    Input/output:
         16 kHz / signed 16-bit / little-endian / mono PCM
-
-    Output:
-        Same PCM format.
-
-    For Phase 1H the returned audio is deliberately deterministic.
-    It proves the complete network/speaker path before STT, LLM,
-    and TTS are introduced.
     """
     pcm = request.get_data(cache=False)
 
-    if not pcm:
+    if not pcm or len(pcm) % 2:
         return jsonify(
             status="error",
-            error="PCM body required",
+            error="valid signed-16 PCM body required",
         ), 400
-
-    if len(pcm) % 2:
-        return jsonify(
-            status="error",
-            error="PCM body must contain complete 16-bit samples",
-        ), 400
-
-    sample_count = len(pcm) // 2
-    duration = sample_count / 16000.0
 
     print(
-        f"[PROGRE] AUDIO received "
-        f"bytes={len(pcm)} "
-        f"samples={sample_count} "
-        f"duration={duration:.2f}s",
+        f"[PROGRE] VOICE received bytes={len(pcm)}",
         flush=True,
     )
 
-    # Deterministic acknowledgment:
-    # 250 ms tone, 100 ms silence, 250 ms higher tone.
-    #
-    # Triangle waves are used so the test does not require numpy
-    # or any other audio dependency.
-    sample_rate = 16000
-    amplitude = 1200
+    try:
+        with tempfile.TemporaryDirectory(
+            prefix="progre-voice-"
+        ) as workdir:
 
-    def triangle(frequency: int, milliseconds: int):
-        frames = sample_rate * milliseconds // 1000
-        period = max(2, sample_rate // frequency)
+            transcript = _transcribe(
+                pcm,
+                workdir
+            )
 
-        for n in range(frames):
-            phase = n % period
-            half = period // 2
+            print(
+                f"[PROGRE] HEARD: {transcript}",
+                flush=True,
+            )
 
-            if phase < half:
-                value = -amplitude + (2 * amplitude * phase) // half
-            else:
-                denom = max(1, period - half)
-                value = amplitude - (
-                    2 * amplitude * (phase - half)
-                ) // denom
+            if not transcript:
+                raise RuntimeError(
+                    "No speech recognized"
+                )
 
-            yield max(-32768, min(32767, value))
+            answer = _ask_progre(transcript)
 
-    response_samples = []
+            print(
+                f"[PROGRE] SAYS: {answer}",
+                flush=True,
+            )
 
-    response_samples.extend(triangle(400, 250))
-    response_samples.extend([0] * (sample_rate * 100 // 1000))
-    response_samples.extend(triangle(600, 250))
+            response_pcm = _synthesize(
+                answer,
+                workdir
+            )
 
-    response_pcm = b"".join(
-        struct.pack("<h", sample)
-        for sample in response_samples
-    )
+        print(
+            f"[PROGRE] VOICE reply bytes="
+            f"{len(response_pcm)}",
+            flush=True,
+        )
 
-    print(
-        f"[PROGRE] AUDIO reply bytes={len(response_pcm)}",
-        flush=True,
-    )
+        return Response(
+            response_pcm,
+            status=200,
+            mimetype="application/octet-stream",
+            headers={
+                "X-Progre-Audio-Format":
+                    "pcm_s16le_mono_16000"
+            },
+        )
 
-    return Response(
-        response_pcm,
-        status=200,
-        mimetype="application/octet-stream",
-        headers={
-            "X-Progre-Audio-Format": "pcm_s16le_mono_16000"
-        },
-    )
+    except Exception as exc:
+        print(
+            f"[PROGRE] VOICE ERROR: {exc}",
+            flush=True,
+        )
+
+        return jsonify(
+            status="error",
+            error=str(exc),
+        ), 500
 
 
 if __name__ == "__main__":

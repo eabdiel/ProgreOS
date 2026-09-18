@@ -11,6 +11,7 @@
 #include "progre_wifi.h"
 #include "sdkconfig.h"
 
+#include "progre_audio.h"
 static const char *TAG = "PROGRE_BRIDGE";
 
 #define RESPONSE_BUFFER_SIZE 512
@@ -379,6 +380,300 @@ esp_err_t progre_bridge_exchange_audio(
             TAG,
             "Audio Bridge request failed: %s",
             esp_err_to_name(result)
+        );
+    }
+
+    esp_http_client_cleanup(client);
+
+    return result;
+}
+
+
+typedef struct {
+    bool playback_started;
+    bool playback_failed;
+    size_t response_bytes;
+    uint8_t carry_byte;
+    bool have_carry;
+} progre_audio_stream_response_t;
+
+
+static esp_err_t progre_audio_stream_http_event(
+    esp_http_client_event_t *evt
+)
+{
+    progre_audio_stream_response_t *stream =
+        (progre_audio_stream_response_t *)evt->user_data;
+
+    if (stream == NULL) {
+        return ESP_OK;
+    }
+
+    if (evt->event_id != HTTP_EVENT_ON_DATA ||
+        evt->data == NULL ||
+        evt->data_len <= 0) {
+        return ESP_OK;
+    }
+
+    if (stream->playback_failed) {
+        return ESP_FAIL;
+    }
+
+    if (!stream->playback_started) {
+        esp_err_t err = progre_audio_stream_begin();
+
+        if (err != ESP_OK) {
+            stream->playback_failed = true;
+            return err;
+        }
+
+        stream->playback_started = true;
+    }
+
+    const uint8_t *data =
+        (const uint8_t *)evt->data;
+
+    size_t len = (size_t)evt->data_len;
+    size_t pos = 0;
+
+    /*
+     * HTTP chunks are byte-oriented and are not guaranteed to end
+     * on a 16-bit PCM boundary. Preserve one odd byte between events.
+     */
+    if (stream->have_carry && len > 0) {
+        uint8_t pair[2] = {
+            stream->carry_byte,
+            data[0]
+        };
+
+        int16_t sample =
+            (int16_t)(
+                ((uint16_t)pair[1] << 8) |
+                (uint16_t)pair[0]
+            );
+
+        esp_err_t err =
+            progre_audio_stream_write(&sample, 1);
+
+        if (err != ESP_OK) {
+            stream->playback_failed = true;
+            return err;
+        }
+
+        stream->have_carry = false;
+        pos = 1;
+    }
+
+    size_t usable = len - pos;
+
+    if (usable & 1U) {
+        stream->carry_byte =
+            data[len - 1];
+
+        stream->have_carry = true;
+        usable--;
+    }
+
+    /*
+     * Avoid alignment assumptions about HTTP's receive buffer.
+     * Convert bounded chunks into aligned int16_t storage.
+     */
+    enum {
+        HTTP_PCM_CHUNK_FRAMES = 256
+    };
+
+    int16_t samples[HTTP_PCM_CHUNK_FRAMES];
+
+    size_t byte_pos = pos;
+    size_t bytes_remaining = usable;
+
+    while (bytes_remaining > 0) {
+        size_t frames =
+            bytes_remaining / sizeof(int16_t);
+
+        if (frames > HTTP_PCM_CHUNK_FRAMES) {
+            frames = HTTP_PCM_CHUNK_FRAMES;
+        }
+
+        for (size_t i = 0; i < frames; ++i) {
+            uint8_t lo = data[byte_pos + i * 2];
+            uint8_t hi = data[byte_pos + i * 2 + 1];
+
+            samples[i] =
+                (int16_t)(
+                    ((uint16_t)hi << 8) |
+                    (uint16_t)lo
+                );
+        }
+
+        esp_err_t err =
+            progre_audio_stream_write(
+                samples,
+                frames
+            );
+
+        if (err != ESP_OK) {
+            stream->playback_failed = true;
+            return err;
+        }
+
+        size_t consumed =
+            frames * sizeof(int16_t);
+
+        byte_pos += consumed;
+        bytes_remaining -= consumed;
+    }
+
+    stream->response_bytes += len;
+
+    return ESP_OK;
+}
+
+
+esp_err_t progre_bridge_exchange_audio_stream(
+    const int16_t *request_samples,
+    size_t request_frames
+)
+{
+    if (request_samples == NULL ||
+        request_frames == 0) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    if (progre_wifi_get_state() !=
+        PROGRE_WIFI_CONNECTED) {
+        ESP_LOGE(
+            TAG,
+            "AUDIO stream unavailable: Wi-Fi offline"
+        );
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    char url[256];
+
+    int url_len = snprintf(
+        url,
+        sizeof(url),
+        "http://%s:%d/api/v1/audio",
+        CONFIG_PROGRE_BRIDGE_HOST,
+        CONFIG_PROGRE_BRIDGE_PORT
+    );
+
+    if (url_len <= 0 ||
+        url_len >= (int)sizeof(url)) {
+        return ESP_ERR_INVALID_SIZE;
+    }
+
+    progre_audio_stream_response_t stream = {
+        0
+    };
+
+    esp_http_client_config_t config = {
+        .url = url,
+        .method = HTTP_METHOD_POST,
+        .timeout_ms = 120000,
+        .event_handler =
+            progre_audio_stream_http_event,
+        .user_data = &stream,
+        .buffer_size = 2048,
+    };
+
+    esp_http_client_handle_t client =
+        esp_http_client_init(&config);
+
+    if (client == NULL) {
+        return ESP_ERR_NO_MEM;
+    }
+
+    esp_err_t result = ESP_OK;
+
+    size_t request_bytes =
+        request_frames * sizeof(int16_t);
+
+    ESP_LOGI(
+        TAG,
+        "AUDIO STREAM -> Bridge: %u frames / %u bytes",
+        (unsigned)request_frames,
+        (unsigned)request_bytes
+    );
+
+    esp_http_client_set_header(
+        client,
+        "Content-Type",
+        "application/octet-stream"
+    );
+
+    esp_http_client_set_post_field(
+        client,
+        (const char *)request_samples,
+        (int)request_bytes
+    );
+
+    esp_err_t perform_err =
+        esp_http_client_perform(client);
+
+    int status =
+        esp_http_client_get_status_code(client);
+
+    ESP_LOGI(
+        TAG,
+        "AUDIO STREAM HTTP status: %d",
+        status
+    );
+
+    if (perform_err != ESP_OK) {
+        ESP_LOGE(
+            TAG,
+            "AUDIO STREAM request failed: %s",
+            esp_err_to_name(perform_err)
+        );
+        result = perform_err;
+    } else if (status != 200) {
+        ESP_LOGE(
+            TAG,
+            "AUDIO STREAM unexpected HTTP status: %d",
+            status
+        );
+        result = ESP_FAIL;
+    } else if (stream.playback_failed) {
+        ESP_LOGE(
+            TAG,
+            "AUDIO STREAM playback failed"
+        );
+        result = ESP_FAIL;
+    } else if (!stream.playback_started) {
+        ESP_LOGE(
+            TAG,
+            "AUDIO STREAM response contained no PCM"
+        );
+        result = ESP_FAIL;
+    } else if (stream.have_carry) {
+        ESP_LOGE(
+            TAG,
+            "AUDIO STREAM response ended on odd PCM byte"
+        );
+        result = ESP_ERR_INVALID_SIZE;
+    }
+
+    /*
+     * Always return the amplifier/codec to the quiet state if playback
+     * was opened, even when HTTP later fails.
+     */
+    if (stream.playback_started) {
+        esp_err_t end_err =
+            progre_audio_stream_end();
+
+        if (result == ESP_OK &&
+            end_err != ESP_OK) {
+            result = end_err;
+        }
+    }
+
+    if (result == ESP_OK) {
+        ESP_LOGI(
+            TAG,
+            "AUDIO STREAM <- Bridge: %u bytes complete",
+            (unsigned)stream.response_bytes
         );
     }
 

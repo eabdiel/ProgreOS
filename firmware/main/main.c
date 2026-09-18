@@ -43,18 +43,12 @@ enum {
     PROGRE_CAPTURE_MAX_SECONDS = 2,
     PROGRE_CAPTURE_MAX_FRAMES =
         PROGRE_AUDIO_SAMPLE_RATE *
-        PROGRE_CAPTURE_MAX_SECONDS,
-    PROGRE_RESPONSE_MAX_FRAMES =
-        PROGRE_AUDIO_SAMPLE_RATE
-};
+        PROGRE_CAPTURE_MAX_SECONDS,};
 
 static int16_t s_voice_capture[
     PROGRE_CAPTURE_MAX_FRAMES
 ];
 
-static int16_t s_voice_response[
-    PROGRE_RESPONSE_MAX_FRAMES
-];
 
 void app_main(void)
 {
@@ -149,48 +143,17 @@ void app_main(void)
                 if (microphone_ready &&
                     voice_capture_frames > 0) {
 
-                    size_t response_frames = 0;
-
-                    ESP_LOGI(
-                        TAG,
-                        "Sending utterance to Progre Bridge"
-                    );
-
-                    esp_err_t bridge_result =
-                        progre_bridge_exchange_audio(
+                    esp_err_t conversation_err =
+                        progre_bridge_exchange_audio_stream(
                             s_voice_capture,
-                            voice_capture_frames,
-                            s_voice_response,
-                            PROGRE_RESPONSE_MAX_FRAMES,
-                            &response_frames
+                            voice_capture_frames
                         );
 
-                    if (bridge_result == ESP_OK &&
-                        response_frames > 0) {
-
-                        ESP_LOGI(
-                            TAG,
-                            "Bridge response ready — speaking"
-                        );
-
-                        esp_err_t play_result =
-                            progre_audio_play_mono(
-                                s_voice_response,
-                                response_frames
-                            );
-
-                        if (play_result != ESP_OK) {
-                            ESP_LOGW(
-                                TAG,
-                                "Bridge audio playback failed: %s",
-                                esp_err_to_name(play_result)
-                            );
-                        }
-                    } else {
+                    if (conversation_err != ESP_OK) {
                         ESP_LOGW(
                             TAG,
-                            "Bridge audio exchange failed: %s",
-                            esp_err_to_name(bridge_result)
+                            "Conversation stream failed: %s",
+                            esp_err_to_name(conversation_err)
                         );
                     }
                 }

@@ -64,3 +64,10 @@ esp_err_t progre_audio_play_mono(
     const int16_t *samples,
     size_t frame_count
 );
+
+esp_err_t progre_audio_stream_begin(void);
+esp_err_t progre_audio_stream_write(
+    const int16_t *samples,
+    size_t frame_count
+);
+esp_err_t progre_audio_stream_end(void);

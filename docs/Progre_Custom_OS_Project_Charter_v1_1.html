@@ -167,50 +167,113 @@ interrupt the shared clock domain and prevent microphone capture.
 
 <table>
 <tr><th>Release</th><th>Milestone</th><th>Status</th></tr>
-<tr><td>v0.1</td><td>First Light — display and initial Progre face</td><td>Complete</td></tr>
-<tr><td>v0.2</td><td>Face refinement and blink behavior</td><td>Complete</td></tr>
-<tr><td>v0.3</td><td>Body — Talk button and listening interaction</td><td>Complete</td></tr>
-<tr><td>v0.4</td><td>Voice — ES8311 microphone and speaker</td><td>Complete</td></tr>
-<tr><td>v0.5</td><td>Connected — Wi-Fi and local Progre Bridge protocol</td><td>Next</td></tr>
-<tr><td>v0.6</td><td>Alive — STT/TTS and synchronized expressions</td><td>Planned</td></tr>
-<tr><td>v1.0</td><td>Progre — personality, memory, Japanese companion, AOS/Mesh integration</td><td>Planned</td></tr>
+<tr>
+<td>v0.1</td>
+<td>First Light — display initialization and initial Progre face</td>
+<td>Complete</td>
+</tr>
+<tr>
+<td>v0.2</td>
+<td>Face — accepted Progre visual identity and idle/blink behavior</td>
+<td>Complete</td>
+</tr>
+<tr>
+<td>v0.3</td>
+<td>Body — Talk button and physical interaction mapping</td>
+<td>Complete</td>
+</tr>
+<tr>
+<td>v0.4</td>
+<td>Voice — ES8311 microphone, speaker, and continuously running duplex I2S architecture</td>
+<td>Complete and sealed</td>
+</tr>
+<tr>
+<td>v0.5</td>
+<td>Connected — Wi-Fi manager and physical Progre Voice Bridge handshake</td>
+<td>Complete</td>
+</tr>
+<tr>
+<td>v0.6 candidate</td>
+<td>First Conversation — local speech recognition, local reasoning, speech synthesis, and streamed spoken response</td>
+<td>Physical acceptance complete; release sealing pending</td>
+</tr>
 </table>
 
-<h2>8. Current Release</h2>
-
-<div class="status">
-<p><strong>Progre OS v0.4 Voice</strong></p>
-<p>Git tag: <code>progre-os-v0.4-voice</code></p>
-<p>Git commit: <code>f7ce820</code></p>
-<p>
-Release firmware SHA-256:
-<code>f92fb4675acb918e346cde27d5a2112e6c08653bf1a08a5ff5e4e54b535b7946</code>
-</p>
-<p>
-Verified behavior: microphone capture, speaker playback, microphone-after-speaker
-coexistence, Talk-button interaction, display behavior, and silent release boot.
-</p>
-</div>
-
-<h2>9. Immediate Target — Progre Bridge</h2>
-<p>
-With local Wi-Fi connectivity proven, the next milestone establishes the Progre Bridge protocol between the device and a listener computer or workstation.
-The first usable end-to-end path is:
-</p>
-
-<pre>
-Talk
-  -> capture speech
-  -> send to local bridge
-  -> receive response
-  -> speak response
-  -> update Progre face/state
-</pre>
+<h2>8. Current Release and Accepted Operational State</h2>
 
 <p>
-Initial Phase 1F work should remain local-network-first and avoid unnecessary cloud
-dependencies.
+The latest sealed release remains the Connected generation of Progre OS.
+The current accepted development state extends that release into a complete
+local conversational pipeline and is the candidate foundation for the next
+sealed Progre OS release.
 </p>
+
+<p>
+On September 17, 2026, the physical Progre device successfully completed its
+first full spoken AI conversation. The onboard microphone captured the user's
+speech, Progre OS transported the audio over Wi-Fi to the Progre Voice Bridge,
+Whisper performed local speech recognition, Qwen generated the response,
+Piper synthesized the reply, and the resulting PCM audio was streamed back to
+the AIPI Lite hardware for playback through the ES8311 audio subsystem.
+</p>
+
+<p>
+The acceptance test returned 94,906 bytes of streamed response audio, exceeding
+the earlier fixed one-second response-buffer limitation. Playback completed
+normally while preserving the continuously running duplex I2S architecture,
+after which Progre returned to normal idle and blink behavior without a panic,
+watchdog reset, or reboot.
+</p>
+
+<p>
+The accepted conversational architecture is:
+<strong>person → Progre microphone → Wi-Fi → Progre Voice Bridge → Whisper →
+Qwen → Piper → streamed PCM → Progre speaker</strong>.
+</p>
+
+<p>
+The firmware currently running on the device still identifies itself using the
+v0.5-connected development lineage. The conversational milestone must therefore
+be versioned and sealed separately rather than retroactively represented as an
+already published release.
+</p>
+
+<h2>9. Immediate Target — Voice Character and Conversation Polish</h2>
+
+<p>
+With bidirectional spoken conversation physically proven, the immediate target
+is no longer basic connectivity. The next development work focuses on making
+conversation with Progre feel natural, expressive, and appropriate for a small
+physical desktop companion.
+</p>
+
+<p>
+The next bounded improvements are:
+</p>
+
+<ul>
+<li>
+Give Progre a slightly higher, small-robot voice character while keeping speech
+clear and natural. Voice processing should remain Bridge-side and configurable
+rather than requiring a firmware flash.
+</li>
+<li>
+Represent conversation state visually through distinct listening, thinking,
+speaking, and idle face behaviors.
+</li>
+<li>
+Replace the temporary two-second commissioning capture limit with Talk-button
+duration capture suitable for normal spoken questions.
+</li>
+<li>
+Move configurable voice, model, provider, listener, and connection parameters
+toward the future Progre Cockpit rather than hard-coding workstation settings.
+</li>
+<li>
+Seal the accepted conversational implementation as a properly versioned Progre
+OS release after final interaction-polish acceptance.
+</li>
+</ul>
 
 <h2>10. Future Operator Experience and Product Direction</h2>
 
@@ -288,6 +351,103 @@ Commercialization must not weaken the project's recovery-first engineering model
 original firmware preservation, reversible development where practical, explicit
 validation, and safe handling of destructive operations remain core requirements.
 </p>
+
+<h2>11. Project History</h2>
+
+<h3>September 17, 2026 — First Full Spoken AI Conversation</h3>
+
+<p>
+Progre completed the first accepted end-to-end spoken AI conversation on the
+physical AIPI Lite hardware running the custom Progre OS.
+</p>
+
+<p>
+During the acceptance test, a spoken question was captured through the onboard
+microphone and transported over local Wi-Fi to the Progre Voice Bridge. Whisper
+transcribed the speech locally, Qwen generated a Progre-specific response, Piper
+synthesized the reply, and 94,906 bytes of PCM response audio were streamed back
+to the device and played through its ES8311-based audio subsystem.
+</p>
+
+<p>
+This test also proved the transition from the earlier fixed response-buffer
+prototype to continuous network response playback. The spoken response exceeded
+the old one-second playback ceiling and completed without disabling the paired
+I2S channels. Progre returned to normal idle and blink behavior afterward with
+no panic, watchdog reset, or reboot.
+</p>
+
+<p>
+<strong>First accepted spoken identity response:</strong>
+“I'm Progre!”
+</p>
+
+<p>
+This milestone marked the transition from a recovered and reprogrammed physical
+AI device into a usable ProgreTech companion capable of hearing a person,
+reaching a local intelligence stack, generating a contextual answer, and
+speaking that answer back through its own hardware.
+</p>
+
+<h3>September 17, 2026 — Progre Cockpit Operational</h3>
+
+<p>
+Following acceptance of the first full spoken conversation, the first
+operational Progre Cockpit was brought online as a local browser-based control
+plane. The Cockpit established live configuration of the Voice Bridge without
+requiring firmware changes or reflashing the physical device.
+</p>
+
+<p>
+The accepted initial controls include Ollama model selection, Piper voice
+selection, voice pitch and output volume, model temperature, response-token
+limits, Bridge status, and live Save &amp; Apply behavior. Configuration is
+stored locally and consumed by the Voice Bridge for subsequent conversations;
+Progre does not depend on the Cockpit browser remaining open.
+</p>
+
+<p>
+Physical acceptance confirmed that Cockpit voice-character changes propagated
+through the Bridge and affected Progre's next spoken response as designed.
+This established the foundation for the broader Cockpit lifecycle model,
+including future networking, diagnostics, firmware management, recovery,
+provisioning, and ProgreTech production workflows.
+</p>
+
+<h3>Development Path to First Conversation</h3>
+
+<table>
+<tr><th>Stage</th><th>Proven Capability</th></tr>
+<tr>
+<td>Recovery Baseline</td>
+<td>Original 16 MB AIPI Lite flash preserved and verified before custom firmware development.</td>
+</tr>
+<tr>
+<td>First Light</td>
+<td>ST7735 display initialized and the first Progre face rendered.</td>
+</tr>
+<tr>
+<td>Body</td>
+<td>Talk button and physical board controls mapped and integrated.</td>
+</tr>
+<tr>
+<td>Voice</td>
+<td>ES8311 microphone and speaker proven using continuously running paired TX/RX I2S channels.</td>
+</tr>
+<tr>
+<td>Connected</td>
+<td>Wi-Fi station operation and Progre Voice Bridge handshake physically accepted.</td>
+</tr>
+<tr>
+<td>Network Audio</td>
+<td>Microphone PCM traveled from Progre to the Bridge and deterministic PCM returned to the physical speaker.</td>
+</tr>
+<tr>
+<td>First Conversation</td>
+<td>Whisper → Qwen → Piper completed the first locally processed spoken AI conversation.</td>
+</tr>
+</table>
+
 
 </body>
 </html>

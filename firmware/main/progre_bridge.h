@@ -18,3 +18,8 @@ esp_err_t progre_bridge_exchange_audio(
     size_t response_capacity_frames,
     size_t *response_frames
 );
+
+esp_err_t progre_bridge_exchange_audio_stream(
+    const int16_t *request_samples,
+    size_t request_frames
+);
