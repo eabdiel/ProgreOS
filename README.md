@@ -1,5 +1,11 @@
 # Progre OS
 
+Experimental ESP32-S3 / AIPI Lite companion firmware with display, audio, Wi-Fi, and an external AI voice bridge architecture.
+
+A project of **[ProgreTech LLC](https://progretech.com)**, owned and maintained by **Ed Rodriguez**. Third-party components and contributions retain their respective ownership and notices.
+
+[Project website](https://progretech.com) · [Report an issue](https://github.com/eabdiel/ProgreOS/issues) · [Contribute](CONTRIBUTING.md)
+
 Progre OS is the device-side firmware for the ProgreTech physical AI
 companion.
 
@@ -58,3 +64,19 @@ Bring hardware online incrementally.
 First Light -> Controls -> Audio -> Network -> Bridge -> Companion
 
 No irreversible eFuse operations are permitted by this project.
+
+## Collaboration
+
+Device compatibility notes, setup documentation, and reproducible connection failures are useful ways to help. Read [CONTRIBUTING.md](CONTRIBUTING.md) for issue reports, proposed changes, and attribution requirements.
+
+## License and reuse
+
+No complete root license was found in this repository. Public availability alone does not grant a general right to reuse or redistribute the code. The maintainer needs to clarify the intended license before code contributions or redistribution.
+
+Factory firmware images and hardware-vendor materials are separate from original project code. Preserve the existing prohibition on redistributing factory firmware images.
+
+## More from ProgreTech
+
+Explore [ProgreTech Mesh](https://mesh.progretech.com) for monitoring and interacting with independently running AI agents (sign-in required).
+
+Discover the wider portfolio at [progretech.com](https://progretech.com). These links identify related products; they do not imply a bundled integration or shared license.
